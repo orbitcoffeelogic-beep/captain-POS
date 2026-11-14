@@ -1788,22 +1788,55 @@
         <button onclick="closeModal('modalHistory')" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-mono text-lg transition">✕</button>
       </div>
 
+      <!-- Kartu Ringkasan Penjualan Terfilter (Mirip Riwayat Kas Keluar) -->
+      <div class="px-5 pt-4 pb-3 bg-white border-b border-slate-100">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+            <span class="text-[11px] font-medium text-slate-500">💰 Total Pemasukan (Terfilter)</span>
+            <div id="historySummaryTotalRevenue" class="font-mono font-bold text-lg text-slate-900 mt-0.5">Rp 0</div>
+            <div id="historySummaryTotalRevenueSub" class="text-[10px] text-slate-400 font-mono mt-0.5">Shift Ini: <span class="font-semibold text-slate-600">Rp 0</span> • 0 Tiket Lunas</div>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100">
+            <span class="text-[11px] font-medium text-emerald-700">💵 Total Cash (Terfilter)</span>
+            <div id="historySummaryTotalCash" class="font-mono font-bold text-lg text-emerald-900 mt-0.5">Rp 0</div>
+            <div id="historySummaryTotalCashSub" class="text-[10px] text-emerald-700/80 font-mono mt-0.5">0 Tiket Tunai • Shift Ini: Rp 0</div>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100">
+            <span class="text-[11px] font-medium text-indigo-700">🏦 Total Non-Tunai (Terfilter)</span>
+            <div id="historySummaryTotalNonCash" class="font-mono font-bold text-lg text-indigo-900 mt-0.5">Rp 0</div>
+            <div id="historySummaryTotalNonCashSub" class="text-[10px] text-indigo-600/80 font-mono mt-0.5">0 Tiket QRIS / Non-Tunai • Shift Ini: Rp 0</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Panel Filter & Pencarian Transaksi -->
       <div class="px-5 py-3.5 bg-slate-50 border-b border-slate-200 space-y-3">
+        <!-- Baris 0: Filter Cepat Tanggal -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+          <div class="flex flex-wrap items-center gap-1.5 text-xs">
+            <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mr-1">Filter Cepat:</span>
+            <button type="button" id="btnHistoryDateToday" onclick="setHistoryQuickDate('today')" class="px-3 py-1.5 rounded-xl font-semibold text-xs bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs transition active:scale-95">Hari ini</button>
+            <button type="button" id="btnHistoryDateYesterday" onclick="setHistoryQuickDate('yesterday')" class="px-3 py-1.5 rounded-xl font-semibold text-xs bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs transition active:scale-95">Kemarin</button>
+            <button type="button" id="btnHistoryDate7Days" onclick="setHistoryQuickDate('7days')" class="px-3 py-1.5 rounded-xl font-semibold text-xs bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs transition active:scale-95">7 hari lalu</button>
+            <button type="button" id="btnHistoryDateThisMonth" onclick="setHistoryQuickDate('thisMonth')" class="px-3 py-1.5 rounded-xl font-semibold text-xs bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs transition active:scale-95">Bulan ini</button>
+            <button type="button" id="btnHistoryDateAll" onclick="setHistoryQuickDate('all')" class="px-3 py-1.5 rounded-xl font-bold text-xs bg-blue-600 text-white shadow-xs transition active:scale-95">Semua</button>
+          </div>
+        </div>
+
         <!-- Baris 1: Rentang Tanggal & Urutan Waktu -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-end">
           <div>
             <label class="block font-heading font-extrabold text-[11px] uppercase tracking-wider text-slate-500 mb-1">
               📅 Tanggal Mulai (Dari)
             </label>
-            <input id="historyDateStart" onchange="renderTransactionHistory()" type="date" class="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-mono text-captain-navy focus:outline-none focus:border-captain-navy" />
+            <input id="historyDateStart" onchange="onHistoryCustomDateChange()" type="date" class="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-mono text-captain-navy focus:outline-none focus:border-captain-navy" />
           </div>
 
           <div>
             <label class="block font-heading font-extrabold text-[11px] uppercase tracking-wider text-slate-500 mb-1">
               📅 Tanggal Akhir (Sampai)
             </label>
-            <input id="historyDateEnd" onchange="renderTransactionHistory()" type="date" class="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-mono text-captain-navy focus:outline-none focus:border-captain-navy" />
+            <input id="historyDateEnd" onchange="onHistoryCustomDateChange()" type="date" class="w-full px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-mono text-captain-navy focus:outline-none focus:border-captain-navy" />
           </div>
 
           <div>
@@ -7515,6 +7548,72 @@
       return fallbackMs ? new Date(fallbackMs) : new Date(0);
     }
 
+    let currentHistoryQuickFilter = 'all';
+
+    function updateHistoryQuickDateChipsUI(activeMode) {
+      const map = {
+        today: 'btnHistoryDateToday',
+        yesterday: 'btnHistoryDateYesterday',
+        '7days': 'btnHistoryDate7Days',
+        thisMonth: 'btnHistoryDateThisMonth',
+        all: 'btnHistoryDateAll'
+      };
+      const activeCls = 'px-3 py-1.5 rounded-xl font-bold text-xs bg-blue-600 text-white shadow-xs transition active:scale-95';
+      const inactiveCls = 'px-3 py-1.5 rounded-xl font-semibold text-xs bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs transition active:scale-95';
+      Object.entries(map).forEach(([key, id]) => {
+        const btn = document.getElementById(id);
+        if (btn) btn.className = (key === activeMode) ? activeCls : inactiveCls;
+      });
+    }
+
+    function setHistoryQuickDate(mode) {
+      currentHistoryQuickFilter = mode;
+      const startEl = document.getElementById('historyDateStart');
+      const endEl = document.getElementById('historyDateEnd');
+      const today = new Date();
+      const toStr = d => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+
+      if (mode === 'today') {
+        const s = toStr(today);
+        if (startEl) startEl.value = s;
+        if (endEl) endEl.value = s;
+      } else if (mode === 'yesterday') {
+        const y = new Date(today);
+        y.setDate(y.getDate() - 1);
+        const s = toStr(y);
+        if (startEl) startEl.value = s;
+        if (endEl) endEl.value = s;
+      } else if (mode === '7days') {
+        const past = new Date(today);
+        past.setDate(past.getDate() - 6);
+        if (startEl) startEl.value = toStr(past);
+        if (endEl) endEl.value = toStr(today);
+      } else if (mode === 'thisMonth') {
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        if (startEl) startEl.value = toStr(firstDay);
+        if (endEl) endEl.value = toStr(today);
+      } else if (mode === 'all') {
+        if (startEl) startEl.value = '';
+        if (endEl) endEl.value = '';
+      }
+
+      updateHistoryQuickDateChipsUI(mode);
+      renderTransactionHistory();
+    }
+
+    function onHistoryCustomDateChange() {
+      const startVal = document.getElementById('historyDateStart')?.value || '';
+      const endVal = document.getElementById('historyDateEnd')?.value || '';
+      currentHistoryQuickFilter = (!startVal && !endVal) ? 'all' : 'custom';
+      updateHistoryQuickDateChipsUI(currentHistoryQuickFilter);
+      renderTransactionHistory();
+    }
+
     function resetTransactionHistoryFilters() {
       const startEl = document.getElementById('historyDateStart');
       const endEl = document.getElementById('historyDateEnd');
@@ -7530,6 +7629,8 @@
       if (custEl) custEl.value = '';
       if (queryEl) queryEl.value = '';
 
+      currentHistoryQuickFilter = 'all';
+      updateHistoryQuickDateChipsUI('all');
       renderTransactionHistory();
     }
 
@@ -7600,9 +7701,60 @@
         return sortOrder === 'ASC' ? (b.idx - a.idx) : (a.idx - b.idx);
       });
 
-      const validTotalSum = filtered.reduce((acc, { order }) => {
-        return order.status === 'BATAL' ? acc : acc + (Number(order.totalPrice) || 0);
-      }, 0);
+      if (typeof updateHistoryQuickDateChipsUI === 'function') {
+        updateHistoryQuickDateChipsUI(currentHistoryQuickFilter);
+      }
+
+      const validFilteredOrders = filtered
+        .map(({ order }) => order)
+        .filter(o => o.status !== 'BATAL' && o.status !== 'KADALUARSA');
+
+      const validTotalSum = validFilteredOrders.reduce((acc, o) => acc + (Number(o.totalPrice) || 0), 0);
+
+      const isOrderPaid = (o) => {
+        if (o.paymentStatus) return o.paymentStatus === 'LUNAS';
+        const pm = String(o.paymentMethod || '').trim().toLowerCase();
+        return o.status !== 'MENUNGGU KONFIRMASI' && pm !== 'open tab' && pm !== 'kasbon';
+      };
+
+      const paidFilteredOrders = validFilteredOrders.filter(isOrderPaid);
+      const unpaidFilteredOrders = validFilteredOrders.filter(o => !isOrderPaid(o));
+
+      const cashFilteredOrders = paidFilteredOrders.filter(o => String(o.paymentMethod || '').trim().toLowerCase() === 'tunai');
+      const nonCashFilteredOrders = paidFilteredOrders.filter(o => String(o.paymentMethod || '').trim().toLowerCase() !== 'tunai');
+
+      const totalCashFiltered = cashFilteredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
+      const totalNonCashFiltered = nonCashFilteredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
+      const totalRevenueFiltered = totalCashFiltered + totalNonCashFiltered;
+      const totalUnpaidFiltered = unpaidFilteredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
+
+      const sm = typeof ShiftEngine !== 'undefined'
+        ? ShiftEngine.getCurrentShiftMetrics()
+        : { totalRevenue: 0, cashSales: 0, qrisSales: 0 };
+
+      const elRev = document.getElementById('historySummaryTotalRevenue');
+      const elRevSub = document.getElementById('historySummaryTotalRevenueSub');
+      const elCash = document.getElementById('historySummaryTotalCash');
+      const elCashSub = document.getElementById('historySummaryTotalCashSub');
+      const elNonCash = document.getElementById('historySummaryTotalNonCash');
+      const elNonCashSub = document.getElementById('historySummaryTotalNonCashSub');
+
+      if (elRev) elRev.textContent = formatRupiah(totalRevenueFiltered);
+      if (elRevSub) {
+        if (totalUnpaidFiltered > 0) {
+          elRevSub.innerHTML = `${paidFilteredOrders.length} Lunas • Belum Lunas (Tab/Kasbon): <span class="font-semibold text-amber-600">${formatRupiah(totalUnpaidFiltered)} (${unpaidFilteredOrders.length})</span>`;
+        } else {
+          elRevSub.innerHTML = `Shift Ini: <span class="font-semibold text-slate-600">${formatRupiah(sm.totalRevenue)}</span> • ${paidFilteredOrders.length} Tiket Lunas`;
+        }
+      }
+      if (elCash) elCash.textContent = formatRupiah(totalCashFiltered);
+      if (elCashSub) {
+        elCashSub.textContent = `${cashFilteredOrders.length} Tiket Tunai • Shift Ini: ${formatRupiah(sm.cashSales)}`;
+      }
+      if (elNonCash) elNonCash.textContent = formatRupiah(totalNonCashFiltered);
+      if (elNonCashSub) {
+        elNonCashSub.textContent = `${nonCashFilteredOrders.length} Tiket QRIS / Non-Tunai • Shift Ini: ${formatRupiah(sm.qrisSales)}`;
+      }
 
       const countEl = document.getElementById('historyFoundCount');
       const sumEl = document.getElementById('historyFoundSum');
