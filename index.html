@@ -11089,18 +11089,24 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
 
         const server = await device.gatt.connect();
 
-        let characteristic = null;
+        const preferredServicePrefixes = ['000018f0', 'e7810a71', '49535343', '0000fff0', '0000ff00', '0000ffe0'];
+        const candidates = [];
         const services = await server.getPrimaryServices().catch(() => []);
         for (const service of services) {
+          const svcUuid = String(service.uuid || '').toLowerCase();
+          const svcBonus = preferredServicePrefixes.some(p => svcUuid.startsWith(p)) ? 10 : 0;
           const chars = await service.getCharacteristics().catch(() => []);
           for (const c of chars) {
-            if (c.properties.write || c.properties.writeWithoutResponse) {
-              characteristic = c;
-              break;
+            if (c.properties && (c.properties.write || c.properties.writeWithoutResponse)) {
+              // Prioritaskan characteristic yang mendukung ACK (write with response) agar pengiriman logo besar tidak overflow
+              const score = svcBonus + (c.properties.write ? 5 : 1);
+              candidates.push({ c, score });
             }
           }
-          if (characteristic) break;
         }
+        candidates.sort((a, b) => b.score - a.score);
+        const characteristic = candidates.length > 0 ? candidates[0].c : null;
+        this._safeBleChunkSize = null;
 
         if (!characteristic) {
           throw new Error('Tidak ditemukan write characteristic pada printer ini');
@@ -11298,19 +11304,68 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
       },
 
       async _sendRawBytesNow(byteArray) {
-        if (!this.bluetoothCharacteristic) {
+        const char = this.bluetoothCharacteristic;
+        if (!char) {
           throw new Error('Bluetooth printer tidak terhubung');
         }
 
-        const CHUNK_SIZE = 100;
-        for (let i = 0; i < byteArray.length; i += CHUNK_SIZE) {
-          const chunk = byteArray.slice(i, i + CHUNK_SIZE);
-          if (this.bluetoothCharacteristic.writeValueWithoutResponse) {
-            await this.bluetoothCharacteristic.writeValueWithoutResponse(chunk);
-          } else {
-            await this.bluetoothCharacteristic.writeValue(chunk);
+        const props = char.properties || {};
+        const canWriteWithResp = Boolean(props.write && (typeof char.writeValueWithResponse === 'function' || typeof char.writeValue === 'function'));
+        const canWriteNoResp = Boolean(props.writeWithoutResponse && typeof char.writeValueWithoutResponse === 'function');
+
+        // Gunakan writeWithResponse sebagai prioritas agar ada handshake/flow-control BLE saat kirim logo biner
+        const useWithResp = canWriteWithResp || !canWriteNoResp;
+        let chunkSize = useWithResp ? (this._safeBleChunkSize || 40) : 20;
+        let sentSincePause = 0;
+
+        for (let i = 0; i < byteArray.length;) {
+          const sliceLen = Math.min(chunkSize, byteArray.length - i);
+          const chunk = byteArray.slice(i, i + sliceLen);
+
+          try {
+            if (useWithResp && typeof char.writeValueWithResponse === 'function') {
+              await char.writeValueWithResponse(chunk);
+            } else if (!useWithResp && typeof char.writeValueWithoutResponse === 'function') {
+              await char.writeValueWithoutResponse(chunk);
+            } else if (typeof char.writeValue === 'function') {
+              await char.writeValue(chunk);
+            } else {
+              await char.writeValueWithoutResponse(chunk);
+            }
+          } catch (writeErr) {
+            // Jika printer menolak paket >20 byte atau buffer sempat penuh, turunkan permanen ke 20 byte & coba ulang sekali
+            if (chunkSize > 20) {
+              chunkSize = 20;
+              this._safeBleChunkSize = 20;
+              await new Promise(r => setTimeout(r, 80));
+              const retryChunk = byteArray.slice(i, i + Math.min(20, byteArray.length - i));
+              if (useWithResp && typeof char.writeValueWithResponse === 'function') {
+                await char.writeValueWithResponse(retryChunk);
+              } else if (!useWithResp && typeof char.writeValueWithoutResponse === 'function') {
+                await char.writeValueWithoutResponse(retryChunk);
+              } else {
+                await char.writeValue(retryChunk);
+              }
+              i += retryChunk.length;
+              sentSincePause += retryChunk.length;
+              await new Promise(r => setTimeout(r, 30));
+              continue;
+            }
+            throw writeErr;
           }
-          await new Promise(r => setTimeout(r, 25));
+
+          i += sliceLen;
+          sentSincePause += sliceLen;
+
+          if (i < byteArray.length) {
+            // Beri jeda napas UART ekstra setiap ~800 byte agar printhead sempat mencetak raster logo tanpa overflow
+            if (sentSincePause >= 800) {
+              sentSincePause = 0;
+              await new Promise(r => setTimeout(r, 70));
+            } else {
+              await new Promise(r => setTimeout(r, useWithResp ? 18 : 26));
+            }
+          }
         }
       },
 
@@ -11321,16 +11376,19 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
           img.crossOrigin = 'Anonymous';
           img.onload = () => {
             try {
-              const maxDots = isPaper80 ? 540 : 330;
+              const maxDots = isPaper80 ? 540 : 320;
+              const maxHeight = isPaper80 ? 180 : 130;
               const leftPadBytes = isPaper80 ? 8 : 6; // 6 bytes = 48 dot (aman dari logo BRI)
 
               let width = img.naturalWidth || img.width;
               let height = img.naturalHeight || img.height;
-              const actualTarget = Math.min(targetWidth, maxDots);
-              if (width > actualTarget) {
-                height = Math.round((height * actualTarget) / width);
-                width = actualTarget;
+              if (!width || !height || width <= 0 || height <= 0) {
+                return resolve(null);
               }
+              const actualTarget = Math.min(targetWidth, maxDots);
+              const scale = Math.min(actualTarget / width, maxHeight / height, 1);
+              width = Math.max(8, Math.round(width * scale));
+              height = Math.max(8, Math.round(height * scale));
               const widthBytes = Math.ceil(width / 8);
               const alignedWidth = widthBytes * 8;
 
