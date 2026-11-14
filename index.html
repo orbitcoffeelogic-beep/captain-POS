@@ -3706,10 +3706,43 @@
   }
 ];
 
-    const TABLE_LOCATIONS = [
-      'Meja 01', 'Meja 02', 'Meja 03', 'Meja 04', 'Meja 05', 'Meja 06',
-      'Meja 07', 'Meja 08', 'Meja 09', 'Meja 10', 'Meja 11', 'Area Bar', 'Takeaway'
+    const DEFAULT_TABLE_CONFIG = [
+      { name: 'Meja 01', zone: '🛋️ Zona Indoor & Main Hall', zoneDesc: 'Area ber-AC dekat bar utama & kasir', type: 'MEJA' },
+      { name: 'Meja 02', zone: '🛋️ Zona Indoor & Main Hall', zoneDesc: 'Area ber-AC dekat bar utama & kasir', type: 'MEJA' },
+      { name: 'Meja 03', zone: '🛋️ Zona Indoor & Main Hall', zoneDesc: 'Area ber-AC dekat bar utama & kasir', type: 'MEJA' },
+      { name: 'Meja 04', zone: '🛋️ Zona Indoor & Main Hall', zoneDesc: 'Area ber-AC dekat bar utama & kasir', type: 'MEJA' },
+      { name: 'Meja 05', zone: '🛋️ Zona Indoor & Main Hall', zoneDesc: 'Area ber-AC dekat bar utama & kasir', type: 'MEJA' },
+      { name: 'Meja 06', zone: '🛋️ Zona Indoor & Main Hall', zoneDesc: 'Area ber-AC dekat bar utama & kasir', type: 'MEJA' },
+      { name: 'Meja 07', zone: '🌿 Zona Outdoor, Chill & Bar', zoneDesc: 'Area terbuka, smoking lounge, kursi bar & pesanan bungkus', type: 'MEJA' },
+      { name: 'Meja 08', zone: '🌿 Zona Outdoor, Chill & Bar', zoneDesc: 'Area terbuka, smoking lounge, kursi bar & pesanan bungkus', type: 'MEJA' },
+      { name: 'Meja 09', zone: '🌿 Zona Outdoor, Chill & Bar', zoneDesc: 'Area terbuka, smoking lounge, kursi bar & pesanan bungkus', type: 'MEJA' },
+      { name: 'Meja 10', zone: '🌿 Zona Outdoor, Chill & Bar', zoneDesc: 'Area terbuka, smoking lounge, kursi bar & pesanan bungkus', type: 'MEJA' },
+      { name: 'Meja 11', zone: '🌿 Zona Outdoor, Chill & Bar', zoneDesc: 'Area terbuka, smoking lounge, kursi bar & pesanan bungkus', type: 'MEJA' },
+      { name: 'Area Bar', zone: '🌿 Zona Outdoor, Chill & Bar', zoneDesc: 'Area terbuka, smoking lounge, kursi bar & pesanan bungkus', type: 'BAR' },
+      { name: 'Takeaway', zone: '🌿 Zona Outdoor, Chill & Bar', zoneDesc: 'Area terbuka, smoking lounge, kursi bar & pesanan bungkus', type: 'TAKEAWAY' }
     ];
+    let TABLE_CONFIG_LIST = (() => {
+      try {
+        const cached = JSON.parse(localStorage.getItem('CAPTAIN_CACHED_TABLES') || 'null');
+        if (Array.isArray(cached) && cached.length > 0) return cached;
+      } catch (e) {}
+      return DEFAULT_TABLE_CONFIG.slice();
+    })();
+    let TABLE_LOCATIONS = TABLE_CONFIG_LIST.map(t => t.name);
+    function isTakeawayLocation(loc) {
+      const s = String(loc || '').trim();
+      if (!s) return false;
+      const found = TABLE_CONFIG_LIST.find(t => t.name === s);
+      if (found) return found.type === 'TAKEAWAY';
+      return s.toLowerCase() === 'takeaway';
+    }
+    function isPhysicalTableLocation(loc) {
+      const s = String(loc || '').trim();
+      if (!s) return false;
+      const found = TABLE_CONFIG_LIST.find(t => t.name === s);
+      if (found) return found.type === 'MEJA';
+      return s.startsWith('Meja ');
+    }
 
     const QUICK_MODIFIERS = ['Ice', 'Hot', 'Less Sweet', 'Normal Sugar', 'Extra Shot', 'Takeaway', 'Pedas Pisah'];
 
@@ -4023,7 +4056,7 @@
 
     function isOrderTableActive(o, loc) {
       if (!o || o.status === 'BATAL' || o.location !== loc) return false;
-      if (loc === 'Takeaway') {
+      if (isTakeawayLocation(loc)) {
         return o.status === 'MENUNGGU KONFIRMASI' || o.status === 'DIPROSES' || o.status === 'SIAP SAJI';
       }
       // Meja Fisik (Meja 01 s/d Meja 11, Area Bar, dll):
@@ -4035,9 +4068,13 @@
       if (o.paymentStatus === 'OPEN TAB' || o.paymentStatus === 'BELUM LUNAS') {
         return true;
       }
-      // 3. Sudah SELESAI diantar & LUNAS: Meja TETAP aktif sampai dikonfirmasi dikosongkan (isTableCleared !== true)
+      // 3. Sudah SELESAI diantar (LUNAS / KASBON): Meja TETAP aktif sampai dikonfirmasi dikosongkan
       if (o.isTableCleared !== true) {
         const orderMs = Number(o.createdAtMs) || 0;
+        const clearedMs = Number((appState.clearedTables || {})[loc]) || 0;
+        if (clearedMs > 0 && orderMs > 0 && orderMs <= clearedMs) {
+          return false;
+        }
         // Guard 16 jam agar pesanan hari kemarin tidak mengunci meja selamanya
         if (orderMs > 0 && (Date.now() - orderMs) < (16 * 60 * 60 * 1000)) {
           return true;
@@ -4064,13 +4101,15 @@
       const loc = tableToClearLocation;
       const nowMs = Date.now();
 
+      appState.clearedTables = appState.clearedTables || {};
+      appState.clearedTables[loc] = Math.max(Number(appState.clearedTables[loc]) || 0, nowMs);
+
       let clearedCount = 0;
       (appState.orders || []).forEach(o => {
         if (o.location === loc && o.status !== 'BATAL' && !o.isTableCleared) {
           o.isTableCleared = true;
           o.tableClearedAtMs = nowMs;
           o.lastModifiedAtMs = nowMs;
-          o.syncStatus = 'pending';
           clearedCount++;
         }
       });
@@ -4185,6 +4224,8 @@
             if (data.payload && data.payload.location) {
               const loc = data.payload.location;
               const nowMs = data.payload.clearedAtMs || Date.now();
+              appState.clearedTables = appState.clearedTables || {};
+              appState.clearedTables[loc] = Math.max(Number(appState.clearedTables[loc]) || 0, nowMs);
               (appState.orders || []).forEach(o => {
                 if (o.location === loc && o.status !== 'BATAL' && !o.isTableCleared) {
                   o.isTableCleared = true;
@@ -4868,6 +4909,17 @@
             const existingIds = new Set(appState.orders.map(o => o.orderId));
             const newlyArrivedFromWeb = serverOrders.filter(so => !existingIds.has(so.orderId) && so.status === 'MENUNGGU KONFIRMASI');
 
+            // Sinkronkan peta waktu pengosongan meja lintas perangkat
+            appState.clearedTables = appState.clearedTables || {};
+            if (result.clearedTables && typeof result.clearedTables === 'object') {
+              Object.keys(result.clearedTables).forEach(locKey => {
+                const srvMs = Number(result.clearedTables[locKey]) || 0;
+                if (srvMs > (Number(appState.clearedTables[locKey]) || 0)) {
+                  appState.clearedTables[locKey] = srvMs;
+                }
+              });
+            }
+
             // Local-First Merge: Pertahankan pesanan lokal yang belum tersinkron (pending outbox) atau baru dimodifikasi (<10 dtk)
             const nowMergeMs = Date.now();
             const localMap = new Map();
@@ -4880,10 +4932,20 @@
                 // Pertahankan status _overdueAlertFired agar tidak memicu toast berulang tiap 5 detik
                 if (prevLocal._overdueAlertFired) so._overdueAlertFired = true;
                 so.settledAtMs = Number(so.settledAtMs) || Number(prevLocal.settledAtMs) || 0;
+                // Pertahankan status meja sudah dikosongkan agar tidak muncul lagi saat polling
+                if (prevLocal.isTableCleared) {
+                  so.isTableCleared = true;
+                  so.tableClearedAtMs = prevLocal.tableClearedAtMs || Date.now();
+                }
                 // Jika masih menunggu konfirmasi dan kasir sedang memilih metode otorisasi di kartu, jangan di-reset
                 if (so.status === 'MENUNGGU KONFIRMASI' && prevLocal.selectedAuth) {
                   so.selectedAuth = prevLocal.selectedAuth;
                 }
+              }
+              const locClearedMs = Number(appState.clearedTables[so.location]) || 0;
+              if (locClearedMs > 0 && so.createdAtMs <= locClearedMs && so.status === 'SELESAI' && so.paymentStatus !== 'OPEN TAB' && so.paymentStatus !== 'BELUM LUNAS') {
+                so.isTableCleared = true;
+                so.tableClearedAtMs = locClearedMs;
               }
               orderMap.set(so.orderId, so);
             });
@@ -5023,6 +5085,29 @@
               localStorage.setItem('CAPTAIN_ACTIVE_CREW', JSON.stringify(defaultCrew));
             }
             updateCrewPillUI();
+          }
+
+          // 7b. Sinkronkan Pengaturan Meja & Zona dari tab Meja
+          if (Array.isArray(result.tables) && result.tables.length > 0) {
+            const normalizedTables = result.tables
+              .filter(t => t && t.name)
+              .map(t => ({
+                name: String(t.name).trim(),
+                zone: String(t.zone || 'Area Utama').trim(),
+                zoneDesc: String(t.zoneDesc || '').trim(),
+                type: String(t.type || 'MEJA').trim().toUpperCase()
+              }));
+            if (normalizedTables.length > 0) {
+              TABLE_CONFIG_LIST = normalizedTables;
+              TABLE_LOCATIONS = normalizedTables.map(t => t.name);
+              try {
+                localStorage.setItem('CAPTAIN_CACHED_TABLES', JSON.stringify(TABLE_CONFIG_LIST));
+              } catch (e) {}
+              const posModal = document.getElementById('modalPos');
+              if (posModal && !posModal.classList.contains('hidden') && typeof renderPosTableSelector === 'function') {
+                renderPosTableSelector();
+              }
+            }
           }
 
           // 8. Sinkronkan Riwayat Settlement lintas perangkat dari tab Settlement_Shift
@@ -7267,9 +7352,10 @@
         const isSelected = posState.selectedLocation === loc;
         const hasOpenTab = openTabLocations.has(loc);
         const shortLabel = loc.replace('Meja ', 'M-');
+        const safeLoc = String(loc).replace(/'/g, "\\'");
         return `
-          <button type="button" onclick="selectPosLocation('${loc}')" class="relative min-h-[34px] py-1 px-1 rounded-xl font-mono text-[11px] border transition active:scale-95 flex items-center justify-center ${isSelected ? 'bg-blue-600 text-white border-2 border-blue-600 shadow-xs font-extrabold' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 font-bold'}">
-            ${shortLabel}
+          <button type="button" onclick="selectPosLocation('${safeLoc}')" class="relative min-h-[34px] py-1 px-1 rounded-xl font-mono text-[11px] border transition active:scale-95 flex items-center justify-center ${isSelected ? 'bg-blue-600 text-white border-2 border-blue-600 shadow-xs font-extrabold' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 font-bold'}">
+            ${escapeHtml(shortLabel)}
             ${hasOpenTab ? '<span class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-amber-500 ring-1 ring-white"></span>' : ''}
           </button>
         `;
@@ -8448,7 +8534,7 @@
 
       const occupiedTables = new Set();
       (appState.orders || []).forEach(o => {
-        if (o && String(o.location).startsWith('Meja ') && typeof isOrderTableActive === 'function' && isOrderTableActive(o, o.location)) {
+        if (o && isPhysicalTableLocation(o.location) && typeof isOrderTableActive === 'function' && isOrderTableActive(o, o.location)) {
           occupiedTables.add(o.location);
         }
       });
@@ -13329,7 +13415,7 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
       const addBtn = document.getElementById('btnTableDetailAdd');
       const payBtn = document.getElementById('btnTableDetailPay');
       addBtn.onclick = () => { closeModal('modalTableDetail'); openPosModal(loc, orders[0].customerName || ''); };
-      const isEnjoying = orders.every(o => o.status === 'SELESAI' && o.paymentStatus === 'LUNAS');
+      const isEnjoying = orders.every(o => o.status === 'SELESAI' && (o.paymentStatus === 'LUNAS' || o.paymentStatus === 'KASBON'));
       const clearBtn = document.getElementById('btnTableDetailClear');
       if (clearBtn) {
         clearBtn.classList.toggle('hidden', !isEnjoying);
@@ -13346,25 +13432,26 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
       const container = document.getElementById('radarFloorMapGrid');
       if (!container) return;
 
-      const zones = [
-        {
-          title: '🛋️ Zona Indoor & Main Hall (Meja 01 – Meja 06)',
-          subtitle: 'Area ber-AC dekat bar utama & kasir',
-          locations: ['Meja 01', 'Meja 02', 'Meja 03', 'Meja 04', 'Meja 05', 'Meja 06']
-        },
-        {
-          title: '🌿 Zona Outdoor, Chill & Bar (Meja 07 – Meja 11, Area Bar, Takeaway)',
-          subtitle: 'Area terbuka, smoking lounge, kursi bar & pesanan bungkus',
-          locations: ['Meja 07', 'Meja 08', 'Meja 09', 'Meja 10', 'Meja 11', 'Area Bar', 'Takeaway']
+      const zoneMap = new Map();
+      (TABLE_CONFIG_LIST && TABLE_CONFIG_LIST.length ? TABLE_CONFIG_LIST : DEFAULT_TABLE_CONFIG).forEach(item => {
+        const zName = item.zone || 'Area Utama';
+        if (!zoneMap.has(zName)) {
+          zoneMap.set(zName, { title: zName, subtitle: item.zoneDesc || '', locations: [] });
         }
-      ];
+        const zObj = zoneMap.get(zName);
+        if (!zObj.subtitle && item.zoneDesc) zObj.subtitle = item.zoneDesc;
+        zObj.locations.push(item.name);
+      });
+      const zones = Array.from(zoneMap.values());
 
       const buildNodeHtml = (loc) => {
         const activeOrders = (appState.orders || []).filter(o => isOrderTableActive(o, loc));
 
         if (activeOrders.length === 0) {
           const safeLoc = String(loc).replace(/'/g, "\\'");
-          const icon = loc === 'Takeaway' ? '🛍️' : (loc === 'Area Bar' ? '🍸' : '🪑');
+          const cfg = TABLE_CONFIG_LIST.find(t => t.name === loc);
+          const tType = cfg ? cfg.type : (isTakeawayLocation(loc) ? 'TAKEAWAY' : (String(loc).toLowerCase().includes('bar') ? 'BAR' : 'MEJA'));
+          const icon = tType === 'TAKEAWAY' ? '🛍️' : (tType === 'BAR' ? '🍸' : '🪑');
           return `
             <div onclick="openPosModal('${safeLoc}', '')" class="group cursor-pointer p-2.5 rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-500 bg-slate-50/60 hover:bg-blue-50/40 transition-all active:scale-95 flex flex-col justify-between min-h-[104px]">
               <div class="flex items-center justify-between">
@@ -13385,10 +13472,11 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
         const hasOpenTab = activeOrders.some(o => o.paymentStatus === 'OPEN TAB' || o.paymentStatus === 'BELUM LUNAS');
         const hasRush = activeOrders.some(o => o.isRushPriority);
 
-        // Status Tamu Menikmati: Semua pesanan meja sudah diantar (SELESAI) & LUNAS, tamu masih duduk
+        // Status Tamu Menikmati: Semua pesanan meja sudah diantar (SELESAI) & sudah LUNAS/KASBON, tamu masih duduk
+        const hasKasbonOrder = activeOrders.some(o => o.paymentStatus === 'KASBON');
         const isDineInEnjoying = activeOrders.length > 0 &&
           !hasPendingWeb && !hasProcessing && !hasReady && !hasOpenTab &&
-          activeOrders.every(o => o.status === 'SELESAI' && o.paymentStatus === 'LUNAS');
+          activeOrders.every(o => o.status === 'SELESAI' && (o.paymentStatus === 'LUNAS' || o.paymentStatus === 'KASBON'));
 
         // Hitung Timer Durasi Okupansi Tamu sejak pesanan pertama dibuat
         const oldestMs = Math.min(...activeOrders.map(o => Number(o.createdAtMs) || Date.now()));
@@ -13439,9 +13527,11 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
           pulseClass = 'radar-pulse-cyan';
           badgeHtml = `<span class="whitespace-nowrap shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-600 text-white">⚙️ DIRACIK (${elapsedMins}m)</span>`;
         } else if (isDineInEnjoying) {
-          borderClass = 'border-indigo-400 bg-indigo-50/30';
+          borderClass = hasKasbonOrder ? 'border-purple-400 bg-purple-50/30' : 'border-indigo-400 bg-indigo-50/30';
           pulseClass = '';
-          badgeHtml = `<span class="whitespace-nowrap shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-600 text-white flex items-center gap-1">☕ TAMU DUDUK</span>`;
+          badgeHtml = hasKasbonOrder
+            ? `<span class="whitespace-nowrap shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-600 text-white flex items-center gap-1">📒 KASBON • DUDUK</span>`
+            : `<span class="whitespace-nowrap shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-600 text-white flex items-center gap-1">☕ TAMU DUDUK</span>`;
         }
 
         const primaryReadyOrder = activeOrders.find(o => o.status === 'SIAP SAJI');
