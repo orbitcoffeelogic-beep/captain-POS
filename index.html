@@ -3937,18 +3937,39 @@
         timestamp: getCurrentTimestampStr()
       });
 
+      const wasOpenOrUnpaid = (order.paymentStatus === 'OPEN TAB' || order.paymentStatus === 'BELUM LUNAS');
       // Jika dialihkan ke Kasbon:
       if (newMethod === 'Kasbon') {
         order.paymentStatus = 'KASBON';
+        order.settledAtMs = 0;
         if (typeof upsertLocalPiutangFromOrder === 'function') {
           upsertLocalPiutangFromOrder(order);
         }
-      } else if (oldMethod === 'Kasbon' && newMethod !== 'Kasbon') {
+      } else if (oldMethod === 'Kasbon' || wasOpenOrUnpaid) {
         order.paymentStatus = 'LUNAS';
         order.settledAtMs = nowMs;
-        // Hapus dari piutang aktif jika sebelumnya kasbon
-        if (Array.isArray(appState.piutangAktif)) {
-          appState.piutangAktif = appState.piutangAktif.filter(p => String(p.order_id) !== String(order.orderId));
+        if (oldMethod === 'Kasbon') {
+          // Hapus dari piutang aktif (memori + IndexedDB) & catat arsip lokal
+          const oldRec = (appState.piutangAktif || []).find(p => String(p.order_id) === String(order.orderId));
+          if (Array.isArray(appState.piutangAktif)) {
+            appState.piutangAktif = appState.piutangAktif.filter(p => String(p.order_id) !== String(order.orderId));
+          }
+          if (typeof PosIDB !== 'undefined' && PosIDB.db) {
+            PosIDB.delete('piutang_aktif', order.orderId);
+          }
+          if (oldRec) {
+            oldRec.status_bayar = 'LUNAS';
+            oldRec.tgl_lunas = getCurrentTimestampStr();
+            oldRec.metode_pelunasan = newMethod;
+            oldRec.settledAtMs = nowMs;
+            if (!Array.isArray(appState.piutangArsip)) appState.piutangArsip = [];
+            if (!appState.piutangArsip.some(a => String(a.order_id) === String(oldRec.order_id))) {
+              appState.piutangArsip.unshift(oldRec);
+            }
+            if (typeof PosIDB !== 'undefined' && PosIDB.db) {
+              PosIDB.put('piutang_arsip', oldRec);
+            }
+          }
         }
       }
 
@@ -3987,9 +4008,11 @@
       // Kirim riwayat koreksi ke Google Sheets
       if (typeof sendActionToSheets === 'function') {
         sendActionToSheets({
-          action: 'UPDATE_PAYMENT_METHOD',
+          action: 'UPDATE_STATUS',
           orderId: order.orderId,
+          newStatus: order.status,
           metodeBayar: newMethod,
+          settledAtMs: order.settledAtMs || 0,
           metodeLama: oldMethod,
           catatan: reason ? (reason + ' (oleh ' + activeCrewName + ')') : ('Koreksi dari ' + oldMethod + ' ke ' + newMethod + ' oleh ' + activeCrewName)
         });
@@ -4332,7 +4355,7 @@
             await PosIDB.put('outbox', item);
 
             // Pastikan PIN staf disertakan jika aksi memerlukan otorisasi
-            if (['CREATE_ORDER', 'UPDATE_STATUS', 'SETTLE_KASBON', 'PARTIAL_SETTLE_KASBON', 'ADD_EXPENSE', 'SETTLEMENT_SHIFT', 'CLEAR_TABLE'].includes(String(item.action).toUpperCase())) {
+            if (['CREATE_ORDER', 'UPDATE_STATUS', 'UPDATE_PAYMENT_METHOD', 'SETTLE_KASBON', 'PARTIAL_SETTLE_KASBON', 'ADD_EXPENSE', 'SETTLEMENT_SHIFT', 'CLEAR_TABLE'].includes(String(item.action).toUpperCase())) {
               if (!item.payload.staff_pin && currentStaffPin) {
                 item.payload.staff_pin = currentStaffPin;
               }
@@ -4802,6 +4825,7 @@
               let rawPay = String(o.metodeBayar || 'TUNAI').trim();
               let uiMethod = 'Tunai';
               if (rawPay.toUpperCase() === 'QRIS') uiMethod = 'QRIS';
+              else if (rawPay.toUpperCase() === 'TRANSFER') uiMethod = 'Transfer';
               else if (rawPay.toUpperCase() === 'KASBON') uiMethod = 'Kasbon';
               else if (isOpenTabTagged || rawPay.toUpperCase() === 'OPEN TAB') uiMethod = 'Open Tab';
 
@@ -4833,6 +4857,7 @@
                 selectedAuth: uiMethod,
                 paymentStatus: payStatus,
                 status: uiStatus,
+                settledAtMs: Number(o.settledAtMs) || 0,
                 syncStatus: 'synced',
                 round: 1,
                 source: 'SHEETS'
@@ -4854,7 +4879,7 @@
               if (prevLocal) {
                 // Pertahankan status _overdueAlertFired agar tidak memicu toast berulang tiap 5 detik
                 if (prevLocal._overdueAlertFired) so._overdueAlertFired = true;
-                if (prevLocal.settledAtMs) so.settledAtMs = prevLocal.settledAtMs;
+                so.settledAtMs = Number(so.settledAtMs) || Number(prevLocal.settledAtMs) || 0;
                 // Jika masih menunggu konfirmasi dan kasir sedang memilih metode otorisasi di kartu, jangan di-reset
                 if (so.status === 'MENUNGGU KONFIRMASI' && prevLocal.selectedAuth) {
                   so.selectedAuth = prevLocal.selectedAuth;
@@ -4933,7 +4958,7 @@
                 status_bayar: a.statusBayar || 'LUNAS',
                 tgl_lunas: a.tglLunas || '-',
                 metode_pelunasan: a.metodePelunasan || '-',
-                settledAtMs: prev?.settledAtMs || 0
+                settledAtMs: Number(a.tglLunasMs) || prev?.settledAtMs || 0
               });
             });
             // Pertahankan arsip yang baru dilunasi secara lokal di shift ini
@@ -5782,7 +5807,8 @@
         action: 'UPDATE_STATUS',
         orderId: order.orderId,
         newStatus: 'DIPROSES',
-        metodeBayar: auth
+        metodeBayar: auth,
+        settledAtMs: order.settledAtMs || 0
       });
     }
 
@@ -6467,7 +6493,8 @@
           action: 'UPDATE_STATUS',
           orderId: o.orderId,
           newStatus: targetProductionStatus,
-          metodeBayar: method
+          metodeBayar: method,
+          settledAtMs: nowSettleMs
         });
       });
 
@@ -7717,14 +7744,56 @@
         return o.status !== 'MENUNGGU KONFIRMASI' && pm !== 'open tab' && pm !== 'kasbon';
       };
 
-      const paidFilteredOrders = validFilteredOrders.filter(isOrderPaid);
+      // Identifikasi order yang pernah dicicil via Arsip Piutang agar tidak double-count & nominal sesuai pembayaran aktual
+      const installmentParentIds = new Set();
+      (appState.piutangArsip || []).forEach(arch => {
+        const m = String(arch.order_id || '').match(/^(.+)-C[A-Z0-9]+$/);
+        if (m) installmentParentIds.add(m[1]);
+      });
+
+      const paidFilteredOrders = validFilteredOrders.filter(o => isOrderPaid(o) && !installmentParentIds.has(o.orderId));
       const unpaidFilteredOrders = validFilteredOrders.filter(o => !isOrderPaid(o));
+      const countedPaidOrderIds = new Set(paidFilteredOrders.map(o => o.orderId));
 
       const cashFilteredOrders = paidFilteredOrders.filter(o => String(o.paymentMethod || '').trim().toLowerCase() === 'tunai');
       const nonCashFilteredOrders = paidFilteredOrders.filter(o => String(o.paymentMethod || '').trim().toLowerCase() !== 'tunai');
 
-      const totalCashFiltered = cashFilteredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
-      const totalNonCashFiltered = nonCashFilteredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
+      let totalCashFiltered = cashFilteredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
+      let totalNonCashFiltered = nonCashFilteredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
+      let cashCount = cashFilteredOrders.length;
+      let nonCashCount = nonCashFilteredOrders.length;
+      let kasbonSettledSum = 0;
+
+      // Sertakan pelunasan & cicilan kasbon (piutangArsip) yang tanggal pelunasannya masuk filter aktif
+      if (statusFilter === 'ALL' || statusFilter === 'SELESAI') {
+        (appState.piutangArsip || []).forEach(arch => {
+          if (!arch || countedPaidOrderIds.has(arch.order_id)) return;
+          const settledMs = arch.settledAtMs
+            ? Number(arch.settledAtMs)
+            : (arch.tgl_lunas && arch.tgl_lunas !== '-' ? parseOrderTimestampToDateObj(arch.tgl_lunas, 0).getTime() : 0);
+          if (!settledMs) return;
+          if (startDateBound && settledMs < startDateBound.getTime()) return;
+          if (endDateBound && settledMs > endDateBound.getTime()) return;
+          if (customerQuery && !String(arch.nama_pelanggan || '').toLowerCase().includes(customerQuery)) return;
+          if (generalQuery) {
+            const matchArch =
+              String(arch.order_id || '').toLowerCase().includes(generalQuery) ||
+              String(arch.rincian_pesanan || '').toLowerCase().includes(generalQuery) ||
+              String(arch.metode_pelunasan || '').toLowerCase().includes(generalQuery);
+            if (!matchArch) return;
+          }
+          const amt = Number(arch.total_tagihan) || 0;
+          kasbonSettledSum += amt;
+          if (String(arch.metode_pelunasan || '').trim().toLowerCase() === 'tunai') {
+            totalCashFiltered += amt;
+            cashCount++;
+          } else {
+            totalNonCashFiltered += amt;
+            nonCashCount++;
+          }
+        });
+      }
+
       const totalRevenueFiltered = totalCashFiltered + totalNonCashFiltered;
       const totalUnpaidFiltered = unpaidFilteredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
 
@@ -7741,19 +7810,22 @@
 
       if (elRev) elRev.textContent = formatRupiah(totalRevenueFiltered);
       if (elRevSub) {
+        const parts = [];
+        if (kasbonSettledSum > 0) parts.push(`Termasuk Kasbon Lunas: ${formatRupiah(kasbonSettledSum)}`);
         if (totalUnpaidFiltered > 0) {
-          elRevSub.innerHTML = `${paidFilteredOrders.length} Lunas • Belum Lunas (Tab/Kasbon): <span class="font-semibold text-amber-600">${formatRupiah(totalUnpaidFiltered)} (${unpaidFilteredOrders.length})</span>`;
+          parts.push(`Belum Lunas: <span class="font-semibold text-amber-600">${formatRupiah(totalUnpaidFiltered)} (${unpaidFilteredOrders.length})</span>`);
         } else {
-          elRevSub.innerHTML = `Shift Ini: <span class="font-semibold text-slate-600">${formatRupiah(sm.totalRevenue)}</span> • ${paidFilteredOrders.length} Tiket Lunas`;
+          parts.push(`Shift Ini: <span class="font-semibold text-slate-600">${formatRupiah(sm.totalRevenue)}</span>`);
         }
+        elRevSub.innerHTML = parts.join(' • ');
       }
       if (elCash) elCash.textContent = formatRupiah(totalCashFiltered);
       if (elCashSub) {
-        elCashSub.textContent = `${cashFilteredOrders.length} Tiket Tunai • Shift Ini: ${formatRupiah(sm.cashSales)}`;
+        elCashSub.textContent = `${cashCount} Pembayaran Tunai • Shift Ini: ${formatRupiah(sm.cashSales)}`;
       }
       if (elNonCash) elNonCash.textContent = formatRupiah(totalNonCashFiltered);
       if (elNonCashSub) {
-        elNonCashSub.textContent = `${nonCashFilteredOrders.length} Tiket QRIS / Non-Tunai • Shift Ini: ${formatRupiah(sm.qrisSales)}`;
+        elNonCashSub.textContent = `${nonCashCount} Pembayaran QRIS / Transfer • Shift Ini: ${formatRupiah(sm.qrisSales)}`;
       }
 
       const countEl = document.getElementById('historyFoundCount');
@@ -7932,19 +8004,24 @@
     const ShiftEngine = {
       getShiftCutoffMs() {
         const stored = localStorage.getItem('CAPTAIN_SHIFT_CUTOFF_MS');
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
+        // Hari operasional kedai: pergantian hari di pukul 05:00 pagi agar shift yang tutup lewat tengah malam (00:00–04:59) tidak ter-reset paksa
+        const now = new Date();
+        const opDayStart = new Date(now);
+        if (now.getHours() < 5) {
+          opDayStart.setDate(opDayStart.getDate() - 1);
+        }
+        opDayStart.setHours(5, 0, 0, 0);
 
         if (stored && Number(stored) > 0) {
           const cutMs = Number(stored);
-          if (cutMs < startOfToday.getTime()) {
-            this.setShiftCutoffMs(startOfToday.getTime());
-            return startOfToday.getTime();
+          if (cutMs < opDayStart.getTime()) {
+            this.setShiftCutoffMs(opDayStart.getTime());
+            return opDayStart.getTime();
           }
           return cutMs;
         }
-        this.setShiftCutoffMs(startOfToday.getTime());
-        return startOfToday.getTime();
+        this.setShiftCutoffMs(opDayStart.getTime());
+        return opDayStart.getTime();
       },
 
       setShiftCutoffMs(ms) {
@@ -7968,20 +8045,28 @@
       getCurrentShiftMetrics() {
         const cutoff = this.getShiftCutoffMs();
 
-        // 1. Pesanan lunas dalam shift aktif saat ini (termasuk Open Tab / Kasbon yang dilunasi pada shift ini)
-        const shiftOrders = appState.orders.filter(o => o.status !== 'BATAL' && this.isRecordInCurrentShift(o));
+        // Identifikasi nota yang pernah dicicil via Arsip Piutang (ID berakhiran -C...) agar tidak dihitung dobel dengan total awal order
+        const installmentParentIds = new Set();
+        (appState.piutangArsip || []).forEach(arch => {
+          const m = String(arch.order_id || '').match(/^(.+)-C[A-Z0-9]+$/);
+          if (m) installmentParentIds.add(m[1]);
+        });
+
+        // 1. Pesanan lunas dalam shift aktif saat ini (termasuk Open Tab / Kasbon non-cicilan yang dilunasi pada shift ini)
+        const shiftOrders = appState.orders.filter(o => o.status !== 'BATAL' && o.status !== 'KADALUARSA' && this.isRecordInCurrentShift(o));
         const shiftOrdersLunas = shiftOrders.filter(o => o.paymentStatus === 'LUNAS');
-        const countedOrderIds = new Set(shiftOrdersLunas.map(o => o.orderId));
+        const nonInstallmentLunas = shiftOrdersLunas.filter(o => !installmentParentIds.has(o.orderId));
+        const countedOrderIds = new Set(nonInstallmentLunas.map(o => o.orderId));
 
-        let cashSales = shiftOrdersLunas
-          .filter(o => o.paymentMethod === 'Tunai')
+        let cashSales = nonInstallmentLunas
+          .filter(o => String(o.paymentMethod || '').trim().toLowerCase() === 'tunai')
           .reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
 
-        let qrisSales = shiftOrdersLunas
-          .filter(o => o.paymentMethod === 'QRIS')
+        let qrisSales = nonInstallmentLunas
+          .filter(o => String(o.paymentMethod || '').trim().toLowerCase() !== 'tunai') // Mencakup QRIS & Transfer
           .reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
 
-        // 1b. Tambahkan pelunasan kasbon di piutangArsip yang terjadi pada shift ini namun order aslinya dari hari/shift lama
+        // 1b. Tambahkan seluruh pelunasan & cicilan kasbon di piutangArsip yang terjadi pada shift ini
         (appState.piutangArsip || []).forEach(arch => {
           if (!arch || countedOrderIds.has(arch.order_id)) return;
           const settledMs = arch.settledAtMs
@@ -7989,7 +8074,7 @@
             : (arch.tgl_lunas && arch.tgl_lunas !== '-' ? parseOrderTimestampToDateObj(arch.tgl_lunas, 0).getTime() : 0);
           if (settledMs >= cutoff) {
             const amt = Number(arch.total_tagihan) || 0;
-            if (String(arch.metode_pelunasan || '').toLowerCase() === 'tunai') {
+            if (String(arch.metode_pelunasan || '').trim().toLowerCase() === 'tunai') {
               cashSales += amt;
             } else {
               qrisSales += amt;
