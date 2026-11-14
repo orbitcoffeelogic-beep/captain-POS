@@ -5025,6 +5025,35 @@
             updateCrewPillUI();
           }
 
+          // 8. Sinkronkan Riwayat Settlement lintas perangkat dari tab Settlement_Shift
+          if (Array.isArray(result.settlements)) {
+            try {
+              const localList = JSON.parse(localStorage.getItem('CAPTAIN_SETTLEMENT_HISTORY') || '[]');
+              const settleMap = new Map();
+              result.settlements.forEach(s => {
+                if (s && s.settlementId) settleMap.set(s.settlementId, s);
+              });
+              if (Array.isArray(localList)) {
+                localList.forEach(ls => {
+                  if (!ls || !ls.settlementId) return;
+                  if (!settleMap.has(ls.settlementId)) {
+                    const tsMs = Date.parse(ls.timestamp || '');
+                    const recentlyCreated = !isNaN(tsMs) && (Date.now() - tsMs) < 120000;
+                    if (recentlyCreated) settleMap.set(ls.settlementId, ls);
+                  }
+                });
+              }
+              const mergedSettlements = Array.from(settleMap.values())
+                .sort((a, b) => (Date.parse(b.timestamp || '') || 0) - (Date.parse(a.timestamp || '') || 0))
+                .slice(0, 50);
+              localStorage.setItem('CAPTAIN_SETTLEMENT_HISTORY', JSON.stringify(mergedSettlements));
+              const modalEl = document.getElementById('modalSettlement');
+              if (modalEl && !modalEl.classList.contains('hidden') && typeof renderSettlementHistory === 'function') {
+                renderSettlementHistory();
+              }
+            } catch (e) {}
+          }
+
           saveState();
           SyncQueue.updateSyncBadge();
           renderAll();
