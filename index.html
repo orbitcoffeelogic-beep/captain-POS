@@ -947,11 +947,19 @@
                   <label class="font-heading font-extrabold text-xs uppercase tracking-wider text-slate-700">
                     1. PILIH MEJA / LAYANAN
                   </label>
-                  <span class="text-[10px] text-amber-600 font-semibold">● Oranye: Open Tab</span>
+                  <span class="text-[10px] text-amber-600 font-semibold">● Open Tab</span>
+                  <span class="text-[10px] text-indigo-600 font-semibold">● Terisi</span>
                 </div>
                 <button type="button" onclick="closeModal('modalPos')" title="Tutup Modal" class="w-7 h-7 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center text-xs font-bold transition">✕</button>
               </div>
               <div id="posTableSelector" class="grid grid-cols-7 gap-1"></div>
+              <div id="posOccupiedBanner" class="hidden mt-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between gap-2 text-[11px]">
+                <span id="posOccupiedBannerText" class="text-indigo-900 truncate font-medium">Terisi: -</span>
+                <div class="flex items-center gap-1 shrink-0">
+                  <button type="button" onclick="clearOccupiedTableFromPos()" class="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition active:scale-95">🧹 Kosongkan</button>
+                  <button type="button" onclick="dismissOccupiedPosBanner()" class="px-2 py-0.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold transition active:scale-95">👥 Gabung</button>
+                </div>
+              </div>
             </div>
 
             <!-- 2. Nama pelanggan & Quick Chips Rekomendasi -->
@@ -1158,9 +1166,9 @@
           <span id="checkoutTableBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">Meja 04</span>
           <div>
             <h3 class="font-bold text-lg sm:text-xl text-slate-900 tracking-tight">
-              Pelunasan tagihan Open Tab
+              Bayar Open Tab
             </h3>
-            <p class="text-xs text-slate-500">Selesaikan seluruh akumulasi ronde meja ini.</p>
+            <p class="text-xs text-slate-500">Centang tiket yang dilunasi (Split Bill).</p>
           </div>
         </div>
         <button onclick="closeModal('modalCheckoutTab')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition">✕</button>
@@ -1168,18 +1176,21 @@
 
       <div class="p-5 space-y-4 flex-1 overflow-y-auto">
         <div class="flex items-center justify-between text-xs text-slate-500 border-b border-slate-100 pb-2">
-          <span>Pelanggan: <strong id="checkoutCustomerName" class="text-captain-navy font-bold">-</strong></span>
-          <span>Jumlah Ronde: <strong id="checkoutRoundCount" class="font-mono text-captain-navy">1 Ronde</strong></span>
+          <span>Tamu: <strong id="checkoutCustomerName" class="text-captain-navy font-bold">-</strong></span>
+          <span>Tiket: <strong id="checkoutRoundCount" class="font-mono text-captain-navy">1</strong></span>
         </div>
 
-        <!-- Rincian Gabungan Semua Ronde -->
-        <div id="checkoutRoundsList" class="space-y-2.5 max-h-56 overflow-y-auto pr-1 bg-slate-50 p-3 rounded-2xl border border-slate-200/80"></div>
+        <!-- Filter Cepat Split Bill per Tamu -->
+        <div id="checkoutGuestChips" class="flex items-center gap-1.5 flex-wrap"></div>
 
-        <!-- Total Tagihan Akumulasi -->
+        <!-- Rincian Checklist Tiket Open Tab -->
+        <div id="checkoutRoundsList" class="space-y-2 max-h-56 overflow-y-auto pr-1 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80"></div>
+
+        <!-- Total Tagihan Terpilih -->
         <div class="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between">
           <div>
-            <div class="text-[11px] font-mono uppercase text-slate-400">Total Akumulasi Tagihan</div>
-            <div class="text-xs text-slate-300">Seluruh tiket meja ini akan ditandai LUNAS</div>
+            <div class="text-[11px] font-mono uppercase text-slate-400">Total Terpilih</div>
+            <div id="checkoutSelectedCountText" class="text-xs text-slate-300">1/1 tiket dipilih</div>
           </div>
           <div id="checkoutGrandTotal" class="font-mono font-black text-2xl text-captain-cyan">Rp 0</div>
         </div>
@@ -4096,46 +4107,34 @@
       openModal('modalConfirmClearTable');
     }
 
-    function executeClearTable() {
-      if (!tableToClearLocation) return;
-      const loc = tableToClearLocation;
+    function clearTableByLocation(loc) {
+      if (!loc) return;
       const nowMs = Date.now();
-
       appState.clearedTables = appState.clearedTables || {};
       appState.clearedTables[loc] = Math.max(Number(appState.clearedTables[loc]) || 0, nowMs);
 
-      let clearedCount = 0;
       (appState.orders || []).forEach(o => {
-        if (o.location === loc && o.status !== 'BATAL' && !o.isTableCleared) {
+        if (o.location === loc && o.status !== 'BATAL' && !o.isTableCleared && o.status === 'SELESAI' && o.paymentStatus !== 'OPEN TAB' && o.paymentStatus !== 'BELUM LUNAS') {
           o.isTableCleared = true;
           o.tableClearedAtMs = nowMs;
           o.lastModifiedAtMs = nowMs;
-          clearedCount++;
         }
       });
-
-      closeModal('modalConfirmClearTable');
-      tableToClearLocation = null;
 
       saveState();
       renderAll();
       playNotificationSound('pop');
-      triggerHaptic(30);
-      showToast('✔️ ' + loc + ' telah dikosongkan & siap untuk tamu berikutnya!', 'emerald');
+      triggerHaptic(25);
+      showToast('✓ ' + loc + ' dikosongkan', 'emerald');
 
-      // Broadcast ke tablet lain
       if (typeof PosSyncBus !== 'undefined') {
         PosSyncBus.broadcast('TABLE_CLEARED', { location: loc, clearedAtMs: nowMs });
       }
-
-      // Simpan ke IndexedDB
       try {
-        if (PosIDB.db && Array.isArray(appState.orders)) {
+        if (typeof PosIDB !== 'undefined' && PosIDB.db && Array.isArray(appState.orders)) {
           PosIDB.putBulk('orders', appState.orders);
         }
       } catch (e) {}
-
-      // Kirim riwayat pengosongan meja ke Google Sheets
       if (typeof sendActionToSheets === 'function') {
         sendActionToSheets({
           action: 'CLEAR_TABLE',
@@ -4143,6 +4142,14 @@
           clearedAtMs: nowMs
         });
       }
+    }
+
+    function executeClearTable() {
+      if (!tableToClearLocation) return;
+      const loc = tableToClearLocation;
+      closeModal('modalConfirmClearTable');
+      tableToClearLocation = null;
+      clearTableByLocation(loc);
     }
 
     const PosSyncBus = {
@@ -6518,54 +6525,124 @@
     /*************************************************************************
      * J. MODAL CHECKOUT PELUNASAN OPEN TAB
      *************************************************************************/
-    function openCheckoutTabModal(location) {
-      activeCheckoutLocation = location;
-      const tabOrders = appState.orders.filter(
+    let selectedCheckoutOrderIds = new Set();
+
+    function getActiveCheckoutTabOrders(location = activeCheckoutLocation) {
+      if (!location) return [];
+      return appState.orders.filter(
         o => o.location === location && o.paymentStatus === 'OPEN TAB' && o.status !== 'BATAL'
       );
-      if (tabOrders.length === 0) return;
+    }
 
-      const customerNames = [...new Set(tabOrders.map(o => o.customerName))].join(' / ');
-      const grandTotal = tabOrders.reduce((acc, o) => acc + o.totalPrice, 0);
+    function getSelectedCheckoutOrders() {
+      const tabOrders = getActiveCheckoutTabOrders();
+      return tabOrders.filter(o => selectedCheckoutOrderIds.has(o.orderId));
+    }
 
-      document.getElementById('checkoutTableBadge').textContent = location.toUpperCase();
-      document.getElementById('checkoutCustomerName').textContent = customerNames;
-      document.getElementById('checkoutRoundCount').textContent = `${tabOrders.length} Ronde Pesanan`;
-      document.getElementById('checkoutGrandTotal').textContent = formatRupiah(grandTotal);
+    function renderCheckoutRoundsAndTotals(resetCashToSelected = false) {
+      const tabOrders = getActiveCheckoutTabOrders();
+      const selectedOrders = getSelectedCheckoutOrders();
+      const grandTotal = selectedOrders.reduce((acc, o) => acc + (Number(o.totalPrice) || 0), 0);
 
       const roundsContainer = document.getElementById('checkoutRoundsList');
-      roundsContainer.innerHTML = tabOrders.map((o, idx) => `
-        <div class="p-2.5 rounded-xl bg-white border border-slate-200 text-xs">
-          <div class="flex items-center justify-between font-mono font-bold text-slate-600 mb-1">
-            <span>Ronde ${o.round || (idx + 1)} • #${o.orderId}</span>
-            <span class="text-captain-navy">${formatRupiah(o.totalPrice)}</span>
-          </div>
-          <ul class="space-y-0.5 text-slate-600">
-            ${o.items.map(it => `<li>• ${it.qty}x ${it.name} ${it.note ? `<span class="text-slate-400">(${it.note})</span>` : ''}</li>`).join('')}
-          </ul>
-        </div>
-      `).join('');
+      if (roundsContainer) {
+        roundsContainer.innerHTML = tabOrders.map((o, idx) => {
+          const checked = selectedCheckoutOrderIds.has(o.orderId);
+          return `
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${checked ? 'bg-white border-blue-300 shadow-2xs' : 'bg-slate-100/70 border-slate-200 opacity-60'}">
+              <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleCheckoutTicket('${String(o.orderId).replace(/'/g, "\\'")}')" class="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0" />
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-2 font-mono font-bold text-slate-700 mb-1">
+                  <span class="truncate">👤 ${escapeHtml(o.customerName || 'Tamu')} <span class="font-normal text-slate-400">• R${o.round || (idx + 1)}</span></span>
+                  <span class="text-captain-navy shrink-0">${formatRupiah(o.totalPrice)}</span>
+                </div>
+                <ul class="space-y-0.5 text-slate-600">
+                  ${(o.items || []).map(it => `<li>• ${it.qty}x ${escapeHtml(it.name)} ${it.note ? `<span class="text-slate-400">(${escapeHtml(it.note)})</span>` : ''}</li>`).join('')}
+                </ul>
+              </div>
+            </label>
+          `;
+        }).join('');
+      }
 
-      document.getElementById('checkoutCashInput').value = grandTotal;
+      const uniqueGuests = [...new Set(tabOrders.map(o => String(o.customerName || 'Tamu').trim()))];
+      const chipsEl = document.getElementById('checkoutGuestChips');
+      if (chipsEl) {
+        if (uniqueGuests.length > 1) {
+          const allSelected = selectedOrders.length === tabOrders.length;
+          chipsEl.innerHTML = [
+            `<button type="button" onclick="selectCheckoutGuestFilter('ALL')" class="px-2.5 py-1 rounded-full text-[11px] font-bold border transition ${allSelected ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'}">Semua (${tabOrders.length})</button>`,
+            ...uniqueGuests.map(g => {
+              const gOrders = tabOrders.filter(o => String(o.customerName || 'Tamu').trim() === g);
+              const isOnlyGuest = selectedOrders.length > 0 && selectedOrders.length === gOrders.length && gOrders.every(o => selectedCheckoutOrderIds.has(o.orderId));
+              const safeG = g.replace(/'/g, "\\'");
+              return `<button type="button" onclick="selectCheckoutGuestFilter('${safeG}')" class="px-2.5 py-1 rounded-full text-[11px] font-bold border transition ${isOnlyGuest ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50'}">👤 ${escapeHtml(g)} (${gOrders.length})</button>`;
+            })
+          ].join('');
+        } else {
+          chipsEl.innerHTML = '';
+        }
+      }
+
+      const gtEl = document.getElementById('checkoutGrandTotal');
+      if (gtEl) gtEl.textContent = formatRupiah(grandTotal);
+      const cntEl = document.getElementById('checkoutSelectedCountText');
+      if (cntEl) cntEl.textContent = `${selectedOrders.length}/${tabOrders.length} tiket dipilih`;
+      const rcEl = document.getElementById('checkoutRoundCount');
+      if (rcEl) rcEl.textContent = `${tabOrders.length} Tiket`;
+      const custEl = document.getElementById('checkoutCustomerName');
+      if (custEl) custEl.textContent = uniqueGuests.join(', ') || '-';
+
+      if (resetCashToSelected) {
+        const cashEl = document.getElementById('checkoutCashInput');
+        if (cashEl) cashEl.value = grandTotal;
+      }
       calculateCheckoutChange();
+    }
+
+    function toggleCheckoutTicket(orderId) {
+      if (selectedCheckoutOrderIds.has(orderId)) {
+        selectedCheckoutOrderIds.delete(orderId);
+      } else {
+        selectedCheckoutOrderIds.add(orderId);
+      }
+      renderCheckoutRoundsAndTotals(true);
+    }
+
+    function selectCheckoutGuestFilter(guestName) {
+      const tabOrders = getActiveCheckoutTabOrders();
+      if (guestName === 'ALL') {
+        selectedCheckoutOrderIds = new Set(tabOrders.map(o => o.orderId));
+      } else {
+        selectedCheckoutOrderIds = new Set(
+          tabOrders.filter(o => String(o.customerName || 'Tamu').trim() === guestName).map(o => o.orderId)
+        );
+      }
+      renderCheckoutRoundsAndTotals(true);
+    }
+
+    function openCheckoutTabModal(location) {
+      activeCheckoutLocation = location;
+      const tabOrders = getActiveCheckoutTabOrders(location);
+      if (tabOrders.length === 0) return;
+
+      selectedCheckoutOrderIds = new Set(tabOrders.map(o => o.orderId));
+      document.getElementById('checkoutTableBadge').textContent = location.toUpperCase();
+      renderCheckoutRoundsAndTotals(true);
       openModal('modalCheckoutTab');
     }
 
     function setCashReceived(amount) {
-      const tabOrders = appState.orders.filter(
-        o => o.location === activeCheckoutLocation && o.paymentStatus === 'OPEN TAB' && o.status !== 'BATAL'
-      );
-      const grandTotal = tabOrders.reduce((acc, o) => acc + o.totalPrice, 0);
+      const selectedOrders = getSelectedCheckoutOrders();
+      const grandTotal = selectedOrders.reduce((acc, o) => acc + (Number(o.totalPrice) || 0), 0);
       const input = document.getElementById('checkoutCashInput');
       input.value = amount === 'exact' ? grandTotal : amount;
       calculateCheckoutChange();
     }
 
     function calculateCheckoutChange() {
-      const tabOrders = appState.orders.filter(
-        o => o.location === activeCheckoutLocation && o.paymentStatus === 'OPEN TAB' && o.status !== 'BATAL'
-      );
-      const grandTotal = tabOrders.reduce((acc, o) => acc + o.totalPrice, 0);
+      const selectedOrders = getSelectedCheckoutOrders();
+      const grandTotal = selectedOrders.reduce((acc, o) => acc + (Number(o.totalPrice) || 0), 0);
       const cashReceived = Number(document.getElementById('checkoutCashInput').value) || 0;
       const change = cashReceived - grandTotal;
       const el = document.getElementById('checkoutChangeDisplay');
@@ -6578,15 +6655,16 @@
       }
     }
 
-    // P8: Pelunasan Open Tab tanpa membatalkan/mematikan racikan aktif barista
+    // P8: Pelunasan Open Tab terpilih (mendukung Split Bill) tanpa mematikan racikan barista
     function finalizeOpenTabCheckout(method) {
       if (!activeCheckoutLocation) return;
-      const tabOrders = appState.orders.filter(
-        o => o.location === activeCheckoutLocation && o.paymentStatus === 'OPEN TAB' && o.status !== 'BATAL'
-      );
-      if (tabOrders.length === 0) return;
+      const tabOrders = getSelectedCheckoutOrders();
+      if (tabOrders.length === 0) {
+        showToast('Pilih minimal 1 tiket', 'pink');
+        return;
+      }
 
-      const totalBill = tabOrders.reduce((acc, o) => acc + o.totalPrice, 0);
+      const totalBill = tabOrders.reduce((acc, o) => acc + (Number(o.totalPrice) || 0), 0);
 
       const nowSettleMs = Date.now();
       tabOrders.forEach(o => {
@@ -6599,7 +6677,6 @@
         } else {
           upsertLocalPiutangFromOrder(o);
         }
-        // P8: Jika racikan sudah siap saji, tandai selesai. Jika masih diracik barista (DIPROSES), biarkan tetap DIPROSES!
         const targetProductionStatus = (o.status === 'SIAP SAJI') ? 'SELESAI' : o.status;
         o.status = targetProductionStatus;
 
@@ -6612,19 +6689,19 @@
         });
       });
 
-      showToast(`Open Tab ${activeCheckoutLocation} (${formatRupiah(totalBill)}) diselesaikan via ${method}!`, 'emerald');
+      showToast(`${activeCheckoutLocation}: ${tabOrders.length} tiket (${formatRupiah(totalBill)}) • ${method}`, 'emerald');
       playNotificationSound('ready');
       saveState();
       closeModal('modalCheckoutTab');
       renderAll();
 
-      // FASE 6: Thermal Auto-Print consolidated receipt for Open Tab
+      // FASE 6: Thermal Auto-Print consolidated receipt untuk tiket terpilih
       if (typeof ThermalPrinterEngine !== 'undefined' && method !== 'Kasbon') {
         const consolidatedItems = [];
         tabOrders.forEach(o => {
           (o.items || []).forEach(it => {
             consolidatedItems.push({
-              name: `[Ronde ${o.round || 1}] ${it.name}`,
+              name: `[R${o.round || 1}] ${it.name}`,
               qty: it.qty,
               price: it.price,
               options: it.options,
@@ -6632,11 +6709,12 @@
             });
           });
         });
+        const uniquePaidGuests = [...new Set(tabOrders.map(o => o.customerName).filter(Boolean))].join(', ');
         const consolidatedOrder = {
           orderId: `TAB-${activeCheckoutLocation.replace(/\s+/g, '')}`,
           timestamp: getCurrentTimestampStr(),
           location: activeCheckoutLocation,
-          customerName: tabOrders[0]?.customerName || 'Tamu',
+          customerName: uniquePaidGuests || 'Tamu',
           items: consolidatedItems,
           totalPrice: totalBill,
           paymentMethod: method,
@@ -6658,6 +6736,7 @@
       posState.billyardDiscountEnabled = true;
       posState.cartExpanded = false;
 
+      posState.dismissedOccupiedLoc = null;
       if (prefillLocation) {
         posState.selectedLocation = prefillLocation;
         posState.customerName = prefillCustomer || '';
@@ -6837,11 +6916,50 @@
         badge.classList.add('hidden');
         title.textContent = 'Input Pesanan Kasir Manual (POS Cepat)';
       }
+      updatePosOccupiedBanner();
       updatePosPaymentButtonsUI();
+    }
+
+    function updatePosOccupiedBanner() {
+      const banner = document.getElementById('posOccupiedBanner');
+      const bannerText = document.getElementById('posOccupiedBannerText');
+      if (!banner || !bannerText) return;
+      const loc = posState.selectedLocation;
+      if (!loc || posState.dismissedOccupiedLoc === loc || isTakeawayLocation(loc)) {
+        banner.classList.add('hidden');
+        return;
+      }
+      const activeAtLoc = (appState.orders || []).filter(o => isOrderTableActive(o, loc));
+      const finishedSessions = activeAtLoc.filter(o => o.status === 'SELESAI' && (o.paymentStatus === 'LUNAS' || o.paymentStatus === 'KASBON'));
+      if (finishedSessions.length > 0 && !activeAtLoc.some(o => o.paymentStatus === 'OPEN TAB')) {
+        const names = [...new Set(finishedSessions.map(o => o.customerName).filter(Boolean))].join(', ') || 'Tamu';
+        bannerText.innerHTML = `Terisi: <strong>${escapeHtml(names)}</strong> (Lunas)`;
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    function clearOccupiedTableFromPos() {
+      const loc = posState.selectedLocation;
+      if (!loc) return;
+      clearTableByLocation(loc);
+      const banner = document.getElementById('posOccupiedBanner');
+      if (banner) banner.classList.add('hidden');
+      renderPosTableSelector();
+    }
+
+    function dismissOccupiedPosBanner() {
+      posState.dismissedOccupiedLoc = posState.selectedLocation;
+      const banner = document.getElementById('posOccupiedBanner');
+      if (banner) banner.classList.add('hidden');
     }
 
     function selectPosLocation(loc) {
       posState.selectedLocation = loc;
+      if (posState.dismissedOccupiedLoc && posState.dismissedOccupiedLoc !== loc) {
+        posState.dismissedOccupiedLoc = null;
+      }
       checkLocationRepeatOrderState();
       renderPosTableSelector();
     }
@@ -7347,16 +7465,23 @@
       const openTabLocations = new Set(
         appState.orders.filter(o => o.paymentStatus === 'OPEN TAB' && o.status !== 'BATAL').map(o => o.location)
       );
+      const occupiedLocations = new Set();
+      (appState.orders || []).forEach(o => {
+        if (o && o.location && !isTakeawayLocation(o.location) && isOrderTableActive(o, o.location)) {
+          occupiedLocations.add(o.location);
+        }
+      });
 
       document.getElementById('posTableSelector').innerHTML = TABLE_LOCATIONS.map(loc => {
         const isSelected = posState.selectedLocation === loc;
         const hasOpenTab = openTabLocations.has(loc);
+        const isOccupied = !hasOpenTab && occupiedLocations.has(loc);
         const shortLabel = loc.replace('Meja ', 'M-');
         const safeLoc = String(loc).replace(/'/g, "\\'");
         return `
           <button type="button" onclick="selectPosLocation('${safeLoc}')" class="relative min-h-[34px] py-1 px-1 rounded-xl font-mono text-[11px] border transition active:scale-95 flex items-center justify-center ${isSelected ? 'bg-blue-600 text-white border-2 border-blue-600 shadow-xs font-extrabold' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 font-bold'}">
             ${escapeHtml(shortLabel)}
-            ${hasOpenTab ? '<span class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-amber-500 ring-1 ring-white"></span>' : ''}
+            ${hasOpenTab ? '<span class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-amber-500 ring-1 ring-white"></span>' : (isOccupied ? '<span class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-indigo-500 ring-1 ring-white"></span>' : '')}
           </button>
         `;
       }).join('');
@@ -13527,7 +13652,8 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
         const hasReady = activeOrders.some(o => o.status === 'SIAP SAJI');
         const hasPendingWeb = activeOrders.some(o => o.status === 'MENUNGGU KONFIRMASI');
         const hasProcessing = activeOrders.some(o => o.status === 'DIPROSES');
-        const hasOpenTab = activeOrders.some(o => o.paymentStatus === 'OPEN TAB' || o.paymentStatus === 'BELUM LUNAS');
+        const openTabOrders = activeOrders.filter(o => o.paymentStatus === 'OPEN TAB');
+        const hasOpenTab = openTabOrders.length > 0;
         const hasRush = activeOrders.some(o => o.isRushPriority);
 
         // Status Tamu Menikmati: Semua pesanan meja sudah diantar (SELESAI) & sudah LUNAS/KASBON, tamu masih duduk
@@ -13536,8 +13662,9 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
           !hasPendingWeb && !hasProcessing && !hasReady && !hasOpenTab &&
           activeOrders.every(o => o.status === 'SELESAI' && (o.paymentStatus === 'LUNAS' || o.paymentStatus === 'KASBON'));
 
-        // Hitung Timer Durasi Okupansi Tamu sejak pesanan pertama dibuat
-        const oldestMs = Math.min(...activeOrders.map(o => Number(o.createdAtMs) || Date.now()));
+        // Hitung Timer Durasi Okupansi (fokus pada Open Tab bila ada)
+        const timerPool = hasOpenTab ? openTabOrders : activeOrders;
+        const oldestMs = Math.min(...timerPool.map(o => Number(o.createdAtMs) || Date.now()));
         const elapsedMins = getElapsedMinutes(oldestMs);
         const isOverdue = hasProcessing && elapsedMins >= 10;
 
@@ -13558,15 +13685,19 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
           timerBadgeClass = 'bg-rose-50 text-rose-700 border-rose-200 font-bold';
         }
 
-        const totalBill = activeOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
-        const customerName = activeOrders[0]?.customerName || 'Tamu';
+        // Fokus nominal & nama pada tiket Open Tab (agar klop saat klik Bayar), selain itu tampilkan semua tamu unik
+        const totalBill = hasOpenTab
+          ? openTabOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0)
+          : activeOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
+        const displayNamePool = hasOpenTab ? openTabOrders : activeOrders;
+        const customerName = [...new Set(displayNamePool.map(o => String(o.customerName || 'Tamu').trim()).filter(Boolean))].join(', ') || 'Tamu';
         const safeLoc = String(loc).replace(/'/g, "\\'");
         const safeCust = String(customerName).replace(/'/g, "\\'");
         const safeDwell = String(dwellText).replace(/'/g, "\\'");
 
         let borderClass = 'border-amber-400 bg-amber-50/30';
         let pulseClass = '';
-        let badgeHtml = `<span class="whitespace-nowrap shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500 text-white">OPEN TAB (${activeOrders.length})</span>`;
+        let badgeHtml = `<span class="whitespace-nowrap shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500 text-white">OPEN TAB (${openTabOrders.length})</span>`;
 
         if (isOverdue) {
           borderClass = 'border-rose-500 bg-rose-50/40';
@@ -13621,6 +13752,10 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
               ` : primaryReadyOrder ? `
                 <button type="button" onclick="updateProductionStatus('${escapeHtml(primaryReadyOrder.orderId)}', 'SELESAI')" class="flex-1 py-1 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition active:scale-95 flex items-center justify-center gap-1">
                   <span>🏃</span> <span>Antar</span>
+                </button>
+              ` : isDineInEnjoying ? `
+                <button type="button" onclick="clearTableByLocation('${safeLoc}')" class="flex-1 py-1 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition active:scale-95 flex items-center justify-center gap-1" title="Kosongkan meja (1 klik)">
+                  <span>🧹</span> <span>Kosong</span>
                 </button>
               ` : ''}
             </div>
