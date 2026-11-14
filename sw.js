@@ -3,7 +3,7 @@
  * Mengunci file aplikasi utama, Tailwind CSS CDN, dan Google Fonts di memori Tablet Android
  * sehingga aplikasi tetap dapat dibuka 100% normal meskipun Wi-Fi mati & tablet di-restart.
  */
-const CACHE_NAME = 'captain-pos-offline-v5.13';
+const CACHE_NAME = 'captain-pos-offline-v5.14';
 const CORE_ASSETS = [
   './',
   './index.html',
