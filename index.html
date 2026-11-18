@@ -1977,7 +1977,7 @@
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2.5 pt-2">
-          <button onclick="forceSyncNow()" class="flex-1 min-w-[160px] py-3 px-4 rounded-xl bg-captain-cyan hover:bg-cyan-300 text-captain-navy font-heading font-extrabold text-xs uppercase tracking-wider shadow-xs transition flex items-center justify-center gap-2">
+          <button id="btnForceSyncNow" onclick="forceSyncNow()" class="flex-1 min-w-[160px] py-3 px-4 rounded-xl bg-captain-cyan hover:bg-cyan-300 text-captain-navy font-heading font-extrabold text-xs uppercase tracking-wider shadow-xs transition flex items-center justify-center gap-2 disabled:opacity-60">
             <span>🚀</span> Sinkronkan Sekarang
           </button>
           <button onclick="SyncQueue.clearFailedItems()" class="py-3 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-heading font-bold text-xs uppercase tracking-wider transition">
@@ -2694,6 +2694,8 @@
     let pollTimerId = null;
     let isFetchingOrders = false;
     let currentStaffPin = localStorage.getItem('CAPTAIN_STAFF_PIN') || sessionStorage.getItem('CAPTAIN_STAFF_PIN') || '';
+    const CLIENT_APP_VERSION = 'v5.19';
+    let lastServerApiVersion = '-';
 
     // P10: Sanitasi XSS untuk render data dinamis
     function escapeHtml(str) {
@@ -4305,7 +4307,7 @@
       networkOnline: navigator.onLine,
       outboxCache: [],
       MAX_ATTEMPTS: 8,
-      BATCH_SIZE: 12,
+      BATCH_SIZE: 5,
       PIN_REQUIRED_ACTIONS: ['CREATE_ORDER', 'UPDATE_STATUS', 'TOGGLE_ITEM_STATUS', 'UPDATE_PAYMENT_METHOD', 'SETTLE_KASBON', 'PARTIAL_SETTLE_KASBON', 'ADD_EXPENSE', 'SETTLEMENT_SHIFT', 'CLEAR_TABLE'],
 
       // Jeda coba-ulang: 5d, 10d, 20d, 40d ... maks 5 menit
@@ -4483,14 +4485,16 @@
           SyncQueue.updateSyncBadge();
           return;
         }
-        if (SyncQueue.isFlushing) {
-          if (options.force) {
-            SyncQueue._forceRequested = true;
-            if (SyncQueue._activeFlushPromise) {
-              try { await SyncQueue._activeFlushPromise; } catch (_) {}
-            }
+        while (SyncQueue.isFlushing) {
+          if (!options.force) return;
+          if (SyncQueue._activeFlushPromise) {
+            try { await SyncQueue._activeFlushPromise; } catch (_) {}
+          } else {
+            break;
           }
-          return;
+        }
+        if (options.force) {
+          await SyncQueue.resetRetry(true);
         }
 
         SyncQueue._activeFlushPromise = SyncQueue._runFlushLoop(options);
@@ -4548,7 +4552,7 @@
               const batchRes = await sendActionToSheetsDirect({
                 action: 'BATCH_SYNC',
                 items: batch.map(b => ({ queueId: b.id, payload: b.payload }))
-              }, { timeoutMs: 25000 });
+              }, { timeoutMs: 40000 });
 
               if (batchRes && batchRes.status === 'error' && /batch_sync|tidak dikenali/i.test(String(batchRes.message || ''))) {
                 // Server masih versi lama: nonaktifkan batch untuk sesi ini & kembalikan ke pending
@@ -4558,11 +4562,12 @@
                   await PosIDB.put('outbox', b);
                 }
               } else if (batchRes && batchRes.status === 'success' && Array.isArray(batchRes.results)) {
-                const byId = new Map(batch.map(b => [b.id, b]));
+                const byId = new Map(batch.map(b => [String(b.id), b]));
                 for (const r of batchRes.results) {
-                  const target = byId.get(r.queueId);
+                  const key = String(r.queueId);
+                  const target = byId.get(key);
                   if (!target) continue;
-                  byId.delete(r.queueId);
+                  byId.delete(key);
                   if (r.status === 'success' || r.duplicate) {
                     await SyncQueue._markItemSuccess(target);
                   } else {
@@ -4599,7 +4604,7 @@
                 await PosIDB.put('outbox', item);
                 SyncQueue._attachActiveAuth(item, false);
 
-                let res = await sendActionToSheetsDirect(item.payload, { timeoutMs: 15000 });
+                let res = await sendActionToSheetsDirect(item.payload, { timeoutMs: 20000 });
                 if (res && res.status === 'error' && String(res.message).includes('VOID_ORDER')) {
                   res = await sendActionToSheetsDirect({
                     action: "UPDATE_STATUS",
@@ -4960,6 +4965,7 @@
 
         if (result.status === "success") {
           SyncQueue.networkOnline = true;
+          if (result.version) lastServerApiVersion = String(result.version);
 
           // Cut-off shift ikut settlement terakhir dari server (konsisten di semua tablet)
           if (Number(result.lastSettlementMs) > 0) {
@@ -5612,6 +5618,13 @@
         ? '<span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Online (Terhubung)'
         : '<span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Offline (Terputus)';
 
+      const engineEl = document.getElementById('queueStorageEngine');
+      if (engineEl) {
+        const urlTail = String(SCRIPT_URL || '').slice(-10) || '-';
+        const batchState = SyncQueue._batchUnsupported ? 'Single' : 'Batch';
+        engineEl.textContent = `${CLIENT_APP_VERSION} (${batchState}) • GAS v${lastServerApiVersion} • ...${urlTail}`;
+      }
+
       const pending = await SyncQueue.getPendingItems();
       countEl.textContent = `${pending.length} Transaksi`;
 
@@ -5649,16 +5662,28 @@
         await openSyncQueueModal();
         return;
       }
-      showToast('🚀 Menyinkronkan antrean ke Google Sheets...', 'cyan');
-      await SyncQueue.resetRetry(true);
-      await SyncQueue.flush({ force: true });
-      const remaining = await SyncQueue.getPendingItems();
-      await fetchOrdersFromSheets(false, true);
-      await openSyncQueueModal();
-      if (remaining.length === 0) {
-        showToast('✅ Semua antrean berhasil tersinkron!', 'emerald');
-      } else {
-        showToast(`⚠️ Masih tersisa ${remaining.length} antrean — cek alasan pada daftar.`, 'amber');
+      const btn = document.getElementById('btnForceSyncNow');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Menyinkronkan...';
+      }
+      try {
+        showToast('🚀 Menyinkronkan antrean ke Google Sheets...', 'cyan');
+        await SyncQueue.flush({ force: true });
+        await fetchOrdersFromSheets(false, false);
+        const remaining = await SyncQueue.getPendingItems();
+        await openSyncQueueModal();
+        if (remaining.length === 0) {
+          showToast('✅ Semua antrean berhasil tersinkron!', 'emerald');
+        } else {
+          const firstErr = remaining.find(r => r.lastError)?.lastError || 'Masih menunggu giliran';
+          showToast(`⚠️ Tersisa ${remaining.length} antrean: ${firstErr}`, 'amber');
+        }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>🚀</span> Sinkronkan Sekarang';
+        }
       }
     }
 
@@ -14358,7 +14383,9 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
 
       // Registrasi PWA Service Worker (Pengunci Offline Tablet Android)
       if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-        navigator.serviceWorker.register('./sw.js').catch(err => {
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+          if (navigator.onLine && typeof reg.update === 'function') reg.update().catch(() => {});
+        }).catch(err => {
           console.warn('Registrasi PWA Service Worker dilewati:', err);
         });
       }
