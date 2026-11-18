@@ -9,13 +9,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#0f172a" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=517" />
-  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png?v=517" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=521" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png?v=521" />
   <script>
     if (location.protocol === 'http:' || location.protocol === 'https:') {
       const mLink = document.createElement('link');
       mLink.rel = 'manifest';
-      mLink.href = 'manifest.json?v=517';
+      mLink.href = 'manifest.json?v=521';
       document.head.appendChild(mLink);
     }
   </script>
@@ -1726,6 +1726,9 @@
                 <button type="button" onclick="resetExpenseDateFilter()" title="Reset Filter Tanggal" class="px-2.5 py-1 rounded-xl bg-slate-200/70 hover:bg-slate-300 text-slate-600 text-xs font-bold transition active:scale-95 flex items-center gap-1 shadow-2xs">
                   <span>🔄</span> <span>Reset</span>
                 </button>
+                <button type="button" onclick="loadArchiveHistoryFromServer(this)" title="Muat pengeluaran lama (>35 hari & arsip)" class="btn-load-archive px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition active:scale-95 flex items-center gap-1 shadow-2xs">
+                  <span>📦</span> <span>Arsip (&gt;35h)</span>
+                </button>
               </div>
 
               <!-- Filter Kategori / Cari Cepat -->
@@ -1900,6 +1903,9 @@
             <button type="button" onclick="resetTransactionHistoryFilters()" class="px-3 py-1.5 rounded-xl bg-slate-200/80 hover:bg-slate-300/80 text-slate-700 font-heading font-bold text-xs uppercase tracking-wider transition">
               🔄 Reset Filter
             </button>
+            <button type="button" onclick="loadArchiveHistoryFromServer(this)" title="Muat riwayat lama (>35 hari & arsip)" class="btn-load-archive px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-heading font-bold text-xs uppercase tracking-wider transition">
+              📦 Arsip (&gt;35h)
+            </button>
             <div class="px-3 py-1.5 rounded-xl bg-white border border-slate-200 font-mono text-xs">
               Ditemukan: <strong id="historyFoundCount" class="text-captain-navy font-extrabold">0</strong> Tiket • <strong id="historyFoundSum" class="text-captain-pink font-extrabold">Rp 0</strong>
             </div>
@@ -1969,7 +1975,7 @@
         <div class="border border-slate-200 rounded-2xl overflow-hidden">
           <div class="bg-slate-100 px-4 py-2 text-[11px] font-mono font-bold uppercase text-slate-600 flex justify-between items-center">
             <span>Daftar Transaksi Outbox</span>
-            <span id="queueStorageEngine" class="text-slate-400">IndexedDB: captain_pos_db</span>
+            <span id="queueStorageEngine" class="text-slate-600 font-bold">v5.21 • IndexedDB</span>
           </div>
           <div id="queueListContainer" class="max-h-60 overflow-y-auto divide-y divide-slate-100 p-2 text-xs">
             <div class="py-6 text-center text-slate-400 font-mono text-xs">Antrean kosong. Semua transaksi tersinkron.</div>
@@ -2688,13 +2694,13 @@
     /*************************************************************************
      * A. KONFIGURASI API GOOGLE APPS SCRIPT
      *************************************************************************/
-    const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzLa2QzC2FMgCYWOeroreDWTaXFY8UR9dTikqaohMEFKD8KZMfjiFhNy_ywnxZaV_A6/exec";
+    const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/TEMPEL_URL_DEV_DI_PENGATURAN/exec";
     let SCRIPT_URL = localStorage.getItem('CAPTAIN_GAS_URL') || DEFAULT_SCRIPT_URL;
-    let POLL_INTERVAL_SEC = Number(localStorage.getItem('CAPTAIN_POLL_SEC')) || 3;
+    let POLL_INTERVAL_SEC = Number(localStorage.getItem('CAPTAIN_POLL_SEC')) || 5;
     let pollTimerId = null;
     let isFetchingOrders = false;
     let currentStaffPin = localStorage.getItem('CAPTAIN_STAFF_PIN') || sessionStorage.getItem('CAPTAIN_STAFF_PIN') || '';
-    const CLIENT_APP_VERSION = 'v5.19';
+    const CLIENT_APP_VERSION = 'v5.21';
     let lastServerApiVersion = '-';
 
     // P10: Sanitasi XSS untuk render data dinamis
@@ -4510,7 +4516,7 @@
         SyncQueue.updateSyncBadge(true);
 
         try {
-          for (let pass = 0; pass < 20; pass++) {
+          for (let pass = 0; pass < 100; pass++) {
             if (!navigator.onLine) {
               SyncQueue.networkOnline = false;
               break;
@@ -4808,39 +4814,54 @@
     let activeCheckoutLocation = null;
 
     function saveState() {
-      // 1. Simpan 100% seluruh riwayat pesanan tanpa dipotong di IndexedDB (kapasitas ratusan MB)
+      const nonArchiveOrders = Array.isArray(appState.orders) ? appState.orders.filter(o => o && o.source !== 'ARCHIVE') : [];
+      // 1. Simpan seluruh riwayat aktif (35h + terbuka) ke IndexedDB (kapasitas ratusan MB)
       try {
-        if (PosIDB.db && Array.isArray(appState.orders)) {
-          PosIDB.putBulk('orders', appState.orders);
+        if (PosIDB.db && nonArchiveOrders.length > 0) {
+          PosIDB.putBulk('orders', nonArchiveOrders);
         }
       } catch (idbErr) {
         console.warn('Gagal menyimpan orders ke IndexedDB:', idbErr);
       }
 
-      // 2. Proteksi kuota localStorage (5MB limit): jika pesanan > 300 tiket, simpan tiket 35 hari terakhir
-      //    beserta seluruh tiket yang masih aktif/belum lunas/pending sync ke localStorage.
+      // 2. Proteksi kuota localStorage (5MB limit): simpan orders, pengeluaran, & arsip piutang 35 hari terakhir
+      //    beserta seluruh tiket aktif/belum lunas/pending sync ke localStorage.
       try {
-        let stateForLocalStorage = appState;
-        if (Array.isArray(appState.orders) && appState.orders.length > 300) {
-          const cutoff35DaysMs = Date.now() - (35 * 24 * 60 * 60 * 1000);
-          const recentOrActiveOrders = appState.orders.filter(o => {
-            if (!o) return false;
-            if (o.syncStatus === 'pending') return true;
-            if (o.status !== 'SELESAI' && o.status !== 'BATAL') return true;
-            if (o.paymentStatus === 'OPEN TAB' || o.paymentStatus === 'KASBON' || o.paymentStatus === 'BELUM LUNAS') return true;
-            const orderMs = (o.createdAtMs && Number(o.createdAtMs) > 0)
-              ? Number(o.createdAtMs)
-              : parseOrderTimestampToDateObj(o.timestamp, 0).getTime();
-            return orderMs >= cutoff35DaysMs;
-          });
-          stateForLocalStorage = Object.assign({}, appState, { orders: recentOrActiveOrders });
-        }
+        const cutoff35DaysMs = Date.now() - (35 * 24 * 60 * 60 * 1000);
+        const trimRecentOrders = nonArchiveOrders.length > 150
+          ? nonArchiveOrders.filter(o => {
+              if (o.syncStatus === 'pending') return true;
+              if (o.status !== 'SELESAI' && o.status !== 'BATAL' && o.status !== 'KADALUARSA') return true;
+              if (o.paymentStatus === 'OPEN TAB' || o.paymentStatus === 'KASBON' || o.paymentStatus === 'BELUM LUNAS') return true;
+              const orderMs = (o.createdAtMs && Number(o.createdAtMs) > 0) ? Number(o.createdAtMs) : parseOrderTimestampToDateObj(o.timestamp, 0).getTime();
+              return orderMs >= cutoff35DaysMs;
+            })
+          : nonArchiveOrders;
+
+        const nonArchiveExpenses = Array.isArray(appState.pengeluaran) ? appState.pengeluaran.filter(e => e && e.source !== 'ARCHIVE') : [];
+        const trimRecentExpenses = nonArchiveExpenses.length > 100
+          ? nonArchiveExpenses.filter(e => e.syncStatus === 'pending' || (Number(e.createdAtMs) || 0) >= cutoff35DaysMs)
+          : nonArchiveExpenses;
+
+        const rawArsip = Array.isArray(appState.piutangArsip) ? appState.piutangArsip : [];
+        const trimRecentArsip = rawArsip.length > 100
+          ? rawArsip.filter(a => (Number(a.settledAtMs) || 0) >= cutoff35DaysMs)
+          : rawArsip;
+
+        const stateForLocalStorage = Object.assign({}, appState, {
+          orders: trimRecentOrders,
+          pengeluaran: trimRecentExpenses,
+          piutangArsip: trimRecentArsip
+        });
         localStorage.setItem(STORAGE_KEY, JSON.stringify(stateForLocalStorage));
       } catch (e) {
-        // Fallback darurat jika localStorage penuh (QuotaExceededError): simpan 150 tiket terbaru di localStorage
         try {
-          const fallbackOrders = Array.isArray(appState.orders) ? appState.orders.slice(0, 150) : [];
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({}, appState, { orders: fallbackOrders })));
+          const fallbackOrders = nonArchiveOrders.slice(-150);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({}, appState, {
+            orders: fallbackOrders,
+            pengeluaran: (appState.pengeluaran || []).slice(-60),
+            piutangArsip: (appState.piutangArsip || []).slice(-60)
+          })));
         } catch (innerErr) {
           console.warn('Gagal menyimpan state ke localStorage:', innerErr);
         }
@@ -4937,6 +4958,166 @@
       fetchOrdersFromSheets(showNotification, true);
     }
 
+    function mapServerOrderToLocal(o, sourceTag = 'SHEETS') {
+      const rawNote = (o.catatan && o.catatan !== '-') ? String(o.catatan) : '';
+      const isOpenTabTagged = rawNote.includes('[OPEN TAB]');
+      const cleanNote = rawNote.replace('[OPEN TAB]', '').trim();
+
+      let items = Array.isArray(o.items) && o.items.length ? o.items.map(it => ({
+        id: it.id || '', name: String(it.name || 'Menu Pesanan'), qty: Math.max(1, Number(it.qty) || 1),
+        price: Number(it.price) || 0, note: [it.options, it.note].filter(Boolean).join(' • ') || cleanNote,
+        done: !!it.done || o.status === 'SIAP SAJI' || o.status === 'SELESAI'
+      })) : [];
+      if (!items.length && typeof o.rincian === 'string' && o.rincian.trim() !== '') {
+        items = o.rincian.split(',').map(p => {
+          const trimmed = p.trim();
+          const match = trimmed.match(/^(\d+)x\s+(.+)$/i);
+          const qty = match ? parseInt(match[1], 10) : 1;
+          const fullName = match ? match[2].trim() : (trimmed || 'Menu Pesanan');
+          const baseName = fullName.replace(/\s*\(.*\)$/, '').trim().toLowerCase();
+          const foundMenu = MENU_CATALOG.find(m => String(m.name).toLowerCase() === baseName);
+          return {
+            name: fullName, qty, price: foundMenu ? Number(foundMenu.price) : 0,
+            note: cleanNote, done: o.status === 'SIAP SAJI' || o.status === 'SELESAI'
+          };
+        });
+      }
+
+      let uiStatus = String(o.status || 'MENUNGGU KONFIRMASI').trim().toUpperCase();
+      if (uiStatus === 'MENUNGGU') uiStatus = 'MENUNGGU KONFIRMASI';
+      let rawPay = String(o.metodeBayar || 'TUNAI').trim();
+      let uiMethod = 'Tunai';
+      if (rawPay.toUpperCase() === 'QRIS') uiMethod = 'QRIS';
+      else if (rawPay.toUpperCase() === 'TRANSFER') uiMethod = 'Transfer';
+      else if (rawPay.toUpperCase() === 'KASBON') uiMethod = 'Kasbon';
+      else if (isOpenTabTagged || rawPay.toUpperCase() === 'OPEN TAB') uiMethod = 'Open Tab';
+
+      let payStatus = 'LUNAS';
+      if (uiMethod === 'Open Tab') payStatus = 'OPEN TAB';
+      if (uiMethod === 'Kasbon') payStatus = 'KASBON';
+      if (uiStatus === 'MENUNGGU KONFIRMASI') payStatus = 'BELUM LUNAS';
+      if (uiStatus === 'BATAL' || uiStatus === 'KADALUARSA') payStatus = 'BATAL';
+
+      const parsedServerMs = (o.createdAtMs && Number(o.createdAtMs) > 0)
+        ? Number(o.createdAtMs)
+        : parseOrderTimestampToDateObj(o.timestamp, 0).getTime();
+
+      return {
+        orderId: String(o.orderId || '').trim(),
+        timestamp: o.timestamp || getCurrentTimestampStr(),
+        createdAtMs: parsedServerMs || Date.now(),
+        location: o.meja || 'Meja 01',
+        customerName: o.nama || 'Pelanggan',
+        items: items.length > 0 ? items : [{
+          name: o.rincian || 'Menu Pesanan', qty: 1, price: Number(o.total) || 0, note: cleanNote, done: false
+        }],
+        totalPrice: Number(o.total) || 0,
+        paymentMethod: uiMethod,
+        selectedAuth: uiMethod,
+        paymentStatus: payStatus,
+        status: uiStatus,
+        settledAtMs: Number(o.settledAtMs) || 0,
+        syncStatus: 'synced',
+        round: 1,
+        source: sourceTag
+      };
+    }
+
+    function computeOrdersFingerprint(list) {
+      if (!Array.isArray(list)) return '0';
+      let acc = list.length + '|';
+      for (let i = 0; i < list.length; i++) {
+        const o = list[i];
+        const doneCount = Array.isArray(o.items) ? o.items.reduce((s, it) => s + (it.done ? 1 : 0), 0) : 0;
+        acc += [o.orderId, o.status, o.paymentStatus, o.paymentMethod, o.settledAtMs || 0, o.isTableCleared ? 1 : 0, o.syncStatus, doneCount].join(':') + ';';
+      }
+      return acc;
+    }
+
+    function computeKasbonFingerprint(list) {
+      if (!Array.isArray(list)) return '0';
+      return list.length + '|' + list.map(k => [k.order_id, k.total_tagihan, k.status_bayar, k.syncStatus || ''].join(':')).join(';');
+    }
+
+    async function loadArchiveHistoryFromServer(triggerBtn) {
+      const targetUrl = (SCRIPT_URL || DEFAULT_SCRIPT_URL).trim();
+      if (!targetUrl || targetUrl.includes('TEMPEL_URL')) {
+        showToast('URL Google Apps Script belum diatur.', 'pink');
+        return;
+      }
+      if (triggerBtn) {
+        triggerBtn.disabled = true;
+        triggerBtn.dataset.origHtml = triggerBtn.innerHTML;
+        triggerBtn.innerHTML = '<span>⏳</span> <span>Memuat Arsip...</span>';
+      }
+      try {
+        showToast('📦 Mengambil riwayat arsip lama (>35 hari) dari Google Sheets...', 'cyan');
+        const sep = targetUrl.includes('?') ? '&' : '?';
+        const res = await fetch(`${targetUrl}${sep}action=GET_ARCHIVE_HISTORY&t=${Date.now()}`, {
+          redirect: 'follow',
+          cache: 'no-cache'
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message || 'Gagal memuat arsip');
+
+        let addedOrders = 0;
+        if (Array.isArray(data.orders)) {
+          const existingMap = new Map((appState.orders || []).map(o => [o.orderId, o]));
+          data.orders.forEach(srvO => {
+            const oid = String(srvO.orderId || '').trim();
+            if (oid && !existingMap.has(oid)) {
+              existingMap.set(oid, mapServerOrderToLocal(srvO, 'ARCHIVE'));
+              addedOrders++;
+            }
+          });
+          appState.orders = Array.from(existingMap.values());
+        }
+
+        let addedExp = 0;
+        if (Array.isArray(data.pengeluaran)) {
+          const expMap = new Map((appState.pengeluaran || []).map(e => [e.id, e]));
+          data.pengeluaran.forEach(srvE => {
+            if (srvE.id && !expMap.has(srvE.id)) {
+              expMap.set(srvE.id, Object.assign({ source: 'ARCHIVE' }, srvE));
+              addedExp++;
+            }
+          });
+          appState.pengeluaran = Array.from(expMap.values());
+        }
+
+        if (Array.isArray(data.arsip)) {
+          const aMap = new Map((appState.piutangArsip || []).map(a => [a.order_id, a]));
+          data.arsip.forEach(a => {
+            const oid = String(a.orderId || '').trim();
+            if (oid && !aMap.has(oid)) {
+              aMap.set(oid, {
+                order_id: oid, tanggal: a.tanggal || '-', nama_pelanggan: a.nama || '-',
+                rincian_pesanan: a.rincian || '-', total_tagihan: Number(a.total) || 0,
+                jatuh_tempo: a.jatuhTempo || '-', status_bayar: a.statusBayar || 'LUNAS',
+                tgl_lunas: a.tglLunas || '-', metode_pelunasan: a.metodePelunasan || '-',
+                settledAtMs: Number(a.tglLunasMs) || 0
+              });
+            }
+          });
+          appState.piutangArsip = Array.from(aMap.values());
+        }
+
+        window._archiveHistoryLoaded = true;
+        renderTransactionHistory();
+        renderExpenseList();
+        document.querySelectorAll('.btn-load-archive').forEach(b => {
+          b.innerHTML = '<span>✓</span> <span>Arsip Termuat</span>';
+        });
+        showToast(`✅ Arsip dimuat: +${addedOrders} pesanan, +${addedExp} pengeluaran lama.`, 'emerald');
+      } catch (err) {
+        showToast('⚠️ Gagal memuat arsip lama: ' + (err.message || err), 'pink');
+        if (triggerBtn && triggerBtn.dataset.origHtml) triggerBtn.innerHTML = triggerBtn.dataset.origHtml;
+      } finally {
+        if (triggerBtn) triggerBtn.disabled = false;
+      }
+    }
+
     async function fetchOrdersFromSheets(showNotification = false, forceFull = false) {
       const targetUrl = (SCRIPT_URL || DEFAULT_SCRIPT_URL).trim();
       if (!targetUrl || targetUrl.includes("TEMPEL_URL")) return;
@@ -4992,103 +5173,25 @@
             }
           }
 
-          // 2. Sinkronkan Tab Pesanan_Masuk
+          // 2. Sinkronkan Tab Pesanan_Masuk (window 35h + anti tulis ulang IndexedDB bila identik)
+          let didDataChange = Boolean(showNotification || forceFull);
           if (Array.isArray(result.orders)) {
-            const serverOrders = result.orders.map(o => {
-              const rawNote = (o.catatan && o.catatan !== '-') ? String(o.catatan) : '';
-              const isOpenTabTagged = rawNote.includes('[OPEN TAB]');
-              const cleanNote = rawNote.replace('[OPEN TAB]', '').trim();
+            const serverOrders = result.orders.map(o => mapServerOrderToLocal(o, 'SHEETS'));
 
-              let items = Array.isArray(o.items) && o.items.length ? o.items.map(it => ({
-                id: it.id || '', name: String(it.name || 'Menu Pesanan'), qty: Math.max(1, Number(it.qty) || 1),
-                price: Number(it.price) || 0, note: [it.options, it.note].filter(Boolean).join(' • ') || cleanNote,
-                done: !!it.done || o.status === 'SIAP SAJI' || o.status === 'SELESAI'
-              })) : [];
-              if (!items.length && typeof o.rincian === 'string' && o.rincian.trim() !== '') {
-                const parts = o.rincian.split(',');
-                items = parts.map(p => {
-                  const trimmed = p.trim();
-                  const match = trimmed.match(/^(\d+)x\s+(.+)$/i);
-                  const qty = match ? parseInt(match[1], 10) : 1;
-                  const fullName = match ? match[2].trim() : (trimmed || 'Menu Pesanan');
-                  
-                  // Cocokkan harga dari MENU_CATALOG jika ada
-                  const baseName = fullName.replace(/\s*\(.*\)$/, '').trim().toLowerCase();
-                  const foundMenu = MENU_CATALOG.find(m => String(m.name).toLowerCase() === baseName);
-                  const unitPrice = foundMenu ? Number(foundMenu.price) : 0;
-
-                  return {
-                    name: fullName,
-                    qty: qty,
-                    price: unitPrice,
-                    note: cleanNote,
-                    done: o.status === 'SIAP SAJI' || o.status === 'SELESAI'
-                  };
-                });
-              }
-
-              let uiStatus = String(o.status || 'MENUNGGU KONFIRMASI').trim().toUpperCase();
-              if (uiStatus === 'MENUNGGU') uiStatus = 'MENUNGGU KONFIRMASI';
-
-              // Normalisasi tampilan metode bayar di UI Kasir
-              let rawPay = String(o.metodeBayar || 'TUNAI').trim();
-              let uiMethod = 'Tunai';
-              if (rawPay.toUpperCase() === 'QRIS') uiMethod = 'QRIS';
-              else if (rawPay.toUpperCase() === 'TRANSFER') uiMethod = 'Transfer';
-              else if (rawPay.toUpperCase() === 'KASBON') uiMethod = 'Kasbon';
-              else if (isOpenTabTagged || rawPay.toUpperCase() === 'OPEN TAB') uiMethod = 'Open Tab';
-
-              let payStatus = 'LUNAS';
-              if (uiMethod === 'Open Tab') payStatus = 'OPEN TAB';
-              if (uiMethod === 'Kasbon') payStatus = 'KASBON';
-              if (uiStatus === 'MENUNGGU KONFIRMASI') payStatus = 'BELUM LUNAS';
-              if (uiStatus === 'BATAL' || uiStatus === 'KADALUARSA') payStatus = 'BATAL';
-
-              const parsedServerMs = (o.createdAtMs && Number(o.createdAtMs) > 0)
-                ? Number(o.createdAtMs)
-                : parseOrderTimestampToDateObj(o.timestamp, 0).getTime();
-
-              return {
-                orderId: String(o.orderId || '').trim(),
-                timestamp: o.timestamp || getCurrentTimestampStr(),
-                createdAtMs: parsedServerMs || Date.now(),
-                location: o.meja || 'Meja 01',
-                customerName: o.nama || 'Pelanggan',
-                items: items.length > 0 ? items : [{
-                  name: o.rincian || 'Menu Pesanan',
-                  qty: 1,
-                  price: Number(o.total) || 0,
-                  note: cleanNote,
-                  done: false
-                }],
-                totalPrice: Number(o.total) || 0,
-                paymentMethod: uiMethod,
-                selectedAuth: uiMethod,
-                paymentStatus: payStatus,
-                status: uiStatus,
-                settledAtMs: Number(o.settledAtMs) || 0,
-                syncStatus: 'synced',
-                round: 1,
-                source: 'SHEETS'
-              };
-            });
-
-            // Deteksi pesanan baru dari web pelanggan yang berstatus MENUNGGU KONFIRMASI
             const existingIds = new Set(appState.orders.map(o => o.orderId));
             const newlyArrivedFromWeb = serverOrders.filter(so => !existingIds.has(so.orderId) && so.status === 'MENUNGGU KONFIRMASI');
 
-            // Sinkronkan peta waktu pengosongan meja lintas perangkat
             appState.clearedTables = appState.clearedTables || {};
             if (result.clearedTables && typeof result.clearedTables === 'object') {
               Object.keys(result.clearedTables).forEach(locKey => {
                 const srvMs = Number(result.clearedTables[locKey]) || 0;
                 if (srvMs > (Number(appState.clearedTables[locKey]) || 0)) {
                   appState.clearedTables[locKey] = srvMs;
+                  didDataChange = true;
                 }
               });
             }
 
-            // Local-First Merge: Pertahankan pesanan lokal yang belum tersinkron (pending outbox) atau baru dimodifikasi (<10 dtk)
             const nowMergeMs = Date.now();
             const localMap = new Map();
             appState.orders.forEach(lo => localMap.set(lo.orderId, lo));
@@ -5097,15 +5200,12 @@
             serverOrders.forEach(so => {
               const prevLocal = localMap.get(so.orderId);
               if (prevLocal) {
-                // Pertahankan status _overdueAlertFired agar tidak memicu toast berulang tiap 5 detik
                 if (prevLocal._overdueAlertFired) so._overdueAlertFired = true;
                 so.settledAtMs = Number(so.settledAtMs) || Number(prevLocal.settledAtMs) || 0;
-                // Pertahankan status meja sudah dikosongkan agar tidak muncul lagi saat polling
                 if (prevLocal.isTableCleared) {
                   so.isTableCleared = true;
                   so.tableClearedAtMs = prevLocal.tableClearedAtMs || Date.now();
                 }
-                // Jika masih menunggu konfirmasi dan kasir sedang memilih metode otorisasi di kartu, jangan di-reset
                 if (so.status === 'MENUNGGU KONFIRMASI' && prevLocal.selectedAuth) {
                   so.selectedAuth = prevLocal.selectedAuth;
                 }
@@ -5118,17 +5218,24 @@
               orderMap.set(so.orderId, so);
             });
 
+            // Pertahankan pending lokal, yang baru dimodifikasi (<10d), serta arsip lama (>35h) yang sudah dimuat manual
             appState.orders.forEach(lo => {
               const recentlyModified = lo.lastModifiedAtMs && (nowMergeMs - lo.lastModifiedAtMs) < 10000;
-              if (lo.syncStatus === 'pending' || recentlyModified) {
+              if (lo.syncStatus === 'pending' || recentlyModified || (lo.source === 'ARCHIVE' && !orderMap.has(lo.orderId))) {
                 orderMap.set(lo.orderId, lo);
               }
             });
 
             appState.orders = Array.from(orderMap.values());
-            if (typeof PosIDB !== 'undefined' && PosIDB.db) {
-              await PosIDB.clear('orders');
-              await PosIDB.putBulk('orders', appState.orders);
+            const activeOnlyForIdb = appState.orders.filter(o => o.source !== 'ARCHIVE');
+            const nextOrdersFp = computeOrdersFingerprint(activeOnlyForIdb);
+            if (nextOrdersFp !== window._lastOrdersFingerprint) {
+              window._lastOrdersFingerprint = nextOrdersFp;
+              didDataChange = true;
+              if (typeof PosIDB !== 'undefined' && PosIDB.db) {
+                await PosIDB.clear('orders');
+                await PosIDB.putBulk('orders', activeOnlyForIdb);
+              }
             }
 
             if (newlyArrivedFromWeb.length > 0) {
@@ -5165,9 +5272,14 @@
               }
             });
             appState.piutangAktif = Array.from(kasbonMap.values());
-            if (typeof PosIDB !== 'undefined' && PosIDB.db) {
-              await PosIDB.clear('piutang_aktif');
-              await PosIDB.putBulk('piutang_aktif', appState.piutangAktif);
+            const nextKasbonFp = computeKasbonFingerprint(appState.piutangAktif);
+            if (nextKasbonFp !== window._lastKasbonFingerprint) {
+              window._lastKasbonFingerprint = nextKasbonFp;
+              didDataChange = true;
+              if (typeof PosIDB !== 'undefined' && PosIDB.db) {
+                await PosIDB.clear('piutang_aktif');
+                await PosIDB.putBulk('piutang_aktif', appState.piutangAktif);
+              }
             }
           }
 
@@ -5197,8 +5309,13 @@
                 arsipMap.set(la.order_id, la);
               }
             });
+            const prevArsipFp = (appState.piutangArsip || []).length + ':' + (appState.piutangArsip || []).reduce((s, a) => s + (Number(a.total_tagihan) || 0), 0);
             appState.piutangArsip = Array.from(arsipMap.values());
-            if (typeof PosIDB !== 'undefined' && PosIDB.db) await PosIDB.putBulk('piutang_arsip', appState.piutangArsip);
+            const nextArsipFp = appState.piutangArsip.length + ':' + appState.piutangArsip.reduce((s, a) => s + (Number(a.total_tagihan) || 0), 0);
+            if (prevArsipFp !== nextArsipFp) {
+              didDataChange = true;
+              if (typeof PosIDB !== 'undefined' && PosIDB.db) await PosIDB.putBulk('piutang_arsip', appState.piutangArsip);
+            }
           }
 
           // 5. Sinkronkan Tab Pengumuman / Memo Kedai
@@ -5225,12 +5342,16 @@
             result.pengeluaran.forEach(se => { if (!pendingDelIds.has(se.id)) expMap.set(se.id, se); });
             (appState.pengeluaran || []).forEach(le => {
               const recentlyCreated = le.createdAtMs && (Date.now() - le.createdAtMs) < 15000;
-              if (le.syncStatus === 'pending' || recentlyCreated) {
+              if (le.syncStatus === 'pending' || recentlyCreated || (le.source === 'ARCHIVE' && !expMap.has(le.id))) {
                 expMap.set(le.id, le);
               }
             });
+            const prevExpLen = (appState.pengeluaran || []).length;
             appState.pengeluaran = Array.from(expMap.values());
-            renderExpenseList();
+            if (appState.pengeluaran.length !== prevExpLen || didDataChange) {
+              didDataChange = true;
+              renderExpenseList();
+            }
           }
 
           // 7. Sinkronkan Tab Kru (Hybrid Crew Switching & RBAC)
@@ -5266,6 +5387,7 @@
                 type: String(t.type || 'MEJA').trim().toUpperCase()
               }));
             if (normalizedTables.length > 0) {
+              if (JSON.stringify(normalizedTables) !== JSON.stringify(TABLE_CONFIG_LIST)) didDataChange = true;
               TABLE_CONFIG_LIST = normalizedTables;
               TABLE_LOCATIONS = normalizedTables.map(t => t.name);
               try {
@@ -5307,9 +5429,11 @@
             } catch (e) {}
           }
 
-          saveState();
+          if (didDataChange) {
+            saveState();
+            renderAll();
+          }
           SyncQueue.updateSyncBadge();
-          renderAll();
 
           if (showNotification) {
             showToast(`🔄 Sinkronisasi berhasil! (${result.orders?.length || 0} pesanan, ${MENU_CATALOG.length} menu aktif)`, 'emerald');
@@ -10391,6 +10515,42 @@
       }
     }
 
+    function startAdaptivePollLoop() {
+      if (!window._activityTrackerAttached) {
+        window._activityTrackerAttached = true;
+        window._lastUserActivityMs = Date.now();
+        const markActive = () => { window._lastUserActivityMs = Date.now(); };
+        document.addEventListener('pointerdown', markActive, { passive: true });
+        document.addEventListener('keydown', markActive, { passive: true });
+      }
+      if (pollTimerId) clearInterval(pollTimerId);
+      let idleTickCounter = 0;
+      pollTimerId = setInterval(async () => {
+        if (!navigator.onLine) {
+          SyncQueue.networkOnline = false;
+          SyncQueue.updateSyncBadge();
+          return;
+        }
+        SyncQueue.networkOnline = true;
+        if (!SyncQueue.isFlushing) await SyncQueue.flush();
+        if (SyncQueue.isFlushing || isFetchingOrders) return;
+
+        const hasLiveOrders = (appState.orders || []).some(o =>
+          o.status === 'MENUNGGU KONFIRMASI' || o.status === 'DIPROSES' || o.status === 'SIAP SAJI' || o.paymentStatus === 'OPEN TAB'
+        );
+        const activeRecently = (Date.now() - (window._lastUserActivityMs || 0)) < 300000;
+        const hasQueue = Array.isArray(SyncQueue.outboxCache) && SyncQueue.outboxCache.length > 0;
+
+        if (!hasLiveOrders && !activeRecently && !hasQueue) {
+          idleTickCounter = (idleTickCounter + 1) % 3;
+          if (idleTickCounter !== 0) return; // Mode hemat saat idle: 1/3 frekuensi (~15d jika interval 5d)
+        } else {
+          idleTickCounter = 0;
+        }
+        fetchOrdersFromSheets(false, false);
+      }, POLL_INTERVAL_SEC * 1000);
+    }
+
     function saveSettings() {
       const newUrl = document.getElementById('inputGasUrl').value.trim();
       const newPoll = Math.max(2, Math.min(60, Number(document.getElementById('inputPollInterval').value) || 3));
@@ -10412,17 +10572,7 @@
 
       SyncQueue.networkOnline = navigator.onLine;
 
-      if (pollTimerId) clearInterval(pollTimerId);
-      pollTimerId = setInterval(async () => {
-        if (navigator.onLine) {
-          SyncQueue.networkOnline = true;
-          if (!SyncQueue.isFlushing) await SyncQueue.flush();
-          if (!SyncQueue.isFlushing && !isFetchingOrders) fetchOrdersFromSheets(false, false);
-        } else {
-          SyncQueue.networkOnline = false;
-          SyncQueue.updateSyncBadge();
-        }
-      }, POLL_INTERVAL_SEC * 1000);
+      startAdaptivePollLoop();
 
       closeModal('modalSettings');
       fetchOrdersFromSheets(true, true);
@@ -12944,16 +13094,7 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
         fetchOrdersFromSheets(false, true);
       }
 
-      pollTimerId = setInterval(async () => {
-        if (navigator.onLine) {
-          SyncQueue.networkOnline = true;
-          if (!SyncQueue.isFlushing) await SyncQueue.flush();
-          if (!SyncQueue.isFlushing && !isFetchingOrders) fetchOrdersFromSheets(false, false);
-        } else {
-          SyncQueue.networkOnline = false;
-          SyncQueue.updateSyncBadge();
-        }
-      }, POLL_INTERVAL_SEC * 1000);
+      startAdaptivePollLoop();
     };
 
     /*************************************************************************
