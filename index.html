@@ -9,13 +9,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#0f172a" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
-  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=517" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png?v=517" />
   <script>
     if (location.protocol === 'http:' || location.protocol === 'https:') {
       const mLink = document.createElement('link');
       mLink.rel = 'manifest';
-      mLink.href = 'manifest.json';
+      mLink.href = 'manifest.json?v=517';
       document.head.appendChild(mLink);
     }
   </script>
@@ -4299,24 +4299,43 @@
     // 2. Sync Queue Manager (Antrean Sinkronisasi Otomatis & Retry saat Online)
     const SyncQueue = {
       isFlushing: false,
+      _activeFlushPromise: null,
+      _forceRequested: false,
+      _batchUnsupported: false,
       networkOnline: navigator.onLine,
       outboxCache: [],
       MAX_ATTEMPTS: 8,
+      BATCH_SIZE: 12,
+      PIN_REQUIRED_ACTIONS: ['CREATE_ORDER', 'UPDATE_STATUS', 'TOGGLE_ITEM_STATUS', 'UPDATE_PAYMENT_METHOD', 'SETTLE_KASBON', 'PARTIAL_SETTLE_KASBON', 'ADD_EXPENSE', 'SETTLEMENT_SHIFT', 'CLEAR_TABLE'],
 
       // Jeda coba-ulang: 5d, 10d, 20d, 40d ... maks 5 menit
       backoffMs(attempts) {
         return Math.min(5000 * Math.pow(2, Math.max(0, attempts - 1)), 300000);
       },
 
-      // Tombol Sinkronkan: reset status coba-ulang (termasuk item yang pernah ditolak server)
-      async resetRetry() {
+      _attachActiveAuth(item, overwritePin = false) {
+        if (!item || !item.payload) return;
+        const act = String(item.action || '').toUpperCase();
+        if (act === 'UPDATE_STATUS') item.payload.staleSafe = true;
+        if (SyncQueue.PIN_REQUIRED_ACTIONS.includes(act)) {
+          const activePin = appState?.activeCrew?.pin || currentStaffPin;
+          if (activePin && (overwritePin || !item.payload.staff_pin)) {
+            item.payload.staff_pin = activePin;
+          }
+        }
+      },
+
+      // Tombol Sinkronkan: reset status coba-ulang (dan perbarui PIN staf bila gagal karena PIN lama)
+      async resetRetry(refreshPin = false) {
         const all = await PosIDB.getAll('outbox');
         for (const it of all) {
-          if (it.status === 'failed' || it.status === 'syncing') {
+          if (it.status === 'failed' || it.status === 'syncing' || it.permanent || (it.nextRetryAt && it.nextRetryAt > 0)) {
             it.permanent = false;
             it.nextRetryAt = 0;
             it.attempts = 0;
             it.status = 'pending';
+            const pinErr = /pin/i.test(String(it.lastError || ''));
+            SyncQueue._attachActiveAuth(it, refreshPin && pinErr);
             await PosIDB.put('outbox', it);
           }
         }
@@ -4350,18 +4369,49 @@
       },
 
       async enqueue(action, payload, orderId) {
-        const queueItem = {
-          action: action,
-          payload: payload,
-          orderId: orderId,
-          status: 'pending',
-          attempts: 0,
-          createdAt: Date.now(),
-          lastError: null
-        };
+        const actUpper = String(action || '').toUpperCase();
+        if (actUpper === 'UPDATE_STATUS' && payload) {
+          payload.staleSafe = true;
+        }
 
-        const id = await PosIDB.put('outbox', queueItem);
-        queueItem.id = id;
+        // Coalescing pintar: gabungkan UPDATE_STATUS beruntun pada orderId yang sama yang masih 'pending'
+        let coalesced = false;
+        if (actUpper === 'UPDATE_STATUS' && orderId) {
+          try {
+            const all = await PosIDB.getAll('outbox');
+            const sameOrderPending = all
+              .filter(it => it.orderId === orderId && it.status === 'pending' && !it.permanent)
+              .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            const latest = sameOrderPending[0];
+            if (latest && String(latest.action || '').toUpperCase() === 'UPDATE_STATUS') {
+              latest.payload = Object.assign({}, latest.payload, payload, { staleSafe: true });
+              latest.lastError = null;
+              await PosIDB.put('outbox', latest);
+              coalesced = true;
+            } else if (latest && String(latest.action || '').toUpperCase() === 'CREATE_ORDER') {
+              if (payload.newStatus) latest.payload.status = payload.newStatus;
+              if (payload.items_json !== undefined) latest.payload.items_json = payload.items_json;
+              if (payload.metodeBayar) latest.payload.metodeBayar = payload.metodeBayar;
+              if (payload.settledAtMs) latest.payload.settledAtMs = payload.settledAtMs;
+              latest.lastError = null;
+              await PosIDB.put('outbox', latest);
+              coalesced = true;
+            }
+          } catch (_) {}
+        }
+
+        if (!coalesced) {
+          const queueItem = {
+            action: action,
+            payload: payload,
+            orderId: orderId,
+            status: 'pending',
+            attempts: 0,
+            createdAt: Date.now(),
+            lastError: null
+          };
+          await PosIDB.put('outbox', queueItem);
+        }
 
         if (orderId) {
           const ord = appState.orders.find(o => o.orderId === orderId);
@@ -4374,116 +4424,219 @@
         saveState();
         SyncQueue.updateSyncBadge();
 
-        if (SyncQueue.networkOnline) {
+        if (navigator.onLine) {
+          SyncQueue.networkOnline = true;
           SyncQueue.flush();
         }
       },
 
-      async flush() {
-        if (SyncQueue.isFlushing) return;
+      async _markItemSuccess(item) {
+        await PosIDB.delete('outbox', item.id);
+        if (item.orderId) {
+          const ord = appState.orders.find(o => o.orderId === item.orderId);
+          if (ord) {
+            ord.syncStatus = 'synced';
+            await PosIDB.put('orders', ord);
+          }
+        }
+        const actU = String(item.action || '').toUpperCase();
+        const pl = item.payload || {};
+        if (actU === 'ADD_EXPENSE') {
+          const ex = (appState.pengeluaran || []).find(x => x.id === pl.id);
+          if (ex) ex.syncStatus = 'synced';
+        } else if (actU === 'SETTLE_KASBON' || actU === 'PARTIAL_SETTLE_KASBON') {
+          const pn = (appState.piutangAktif || []).find(x => String(x.order_id) === String(pl.orderId));
+          if (pn) {
+            delete pn.syncStatus;
+            try { await PosIDB.put('piutang_aktif', pn); } catch (_) {}
+          }
+        }
+      },
+
+      async _markItemFailure(item, res, fallbackErrMsg = '') {
+        if (res && (res.status === 'wrong_pin' || res.status === 'error' || res.status === 'not_found')) {
+          const msg = String(res.message || '');
+          const transient = Boolean(res.transient) || /lock|timeout|too many|server error|service invoked|try again|sibuk|http 5|http 429/i.test(msg);
+          item.status = 'failed';
+          item.attempts = (item.attempts || 0) + 1;
+          item.lastError = msg || (res.status === 'not_found' ? 'Data tidak ditemukan di server' : (res.status === 'wrong_pin' ? 'PIN ditolak server' : 'Ditolak server'));
+          if (transient && item.attempts < SyncQueue.MAX_ATTEMPTS) {
+            item.nextRetryAt = Date.now() + SyncQueue.backoffMs(item.attempts);
+            await PosIDB.put('outbox', item);
+            return { transient: true, networkDown: false };
+          }
+          item.permanent = true;
+          await PosIDB.put('outbox', item);
+          return { transient: false, networkDown: false };
+        }
+        item.status = 'failed';
+        item.attempts = (item.attempts || 0) + 1;
+        item.lastError = (res && res.message) || fallbackErrMsg || 'Jaringan tidak merespons';
+        item.nextRetryAt = Date.now() + SyncQueue.backoffMs(item.attempts);
+        await PosIDB.put('outbox', item);
+        return { transient: true, networkDown: true };
+      },
+
+      async flush(options = {}) {
+        SyncQueue.networkOnline = navigator.onLine;
         if (!SyncQueue.networkOnline) {
           SyncQueue.updateSyncBadge();
           return;
         }
-
-        const pending = await SyncQueue.getRetryableItems();
-        if (pending.length === 0) {
-          SyncQueue.updateSyncBadge();
+        if (SyncQueue.isFlushing) {
+          if (options.force) {
+            SyncQueue._forceRequested = true;
+            if (SyncQueue._activeFlushPromise) {
+              try { await SyncQueue._activeFlushPromise; } catch (_) {}
+            }
+          }
           return;
         }
 
+        SyncQueue._activeFlushPromise = SyncQueue._runFlushLoop(options);
+        try {
+          await SyncQueue._activeFlushPromise;
+        } finally {
+          SyncQueue._activeFlushPromise = null;
+        }
+      },
+
+      async _runFlushLoop(options = {}) {
         SyncQueue.isFlushing = true;
         SyncQueue.updateSyncBadge(true);
 
-        for (const item of pending) {
-          if (!SyncQueue.networkOnline) break;
-          // Item terdepan masih menunggu jeda coba-ulang -> berhenti agar urutan tetap terjaga
-          if (item.nextRetryAt && item.nextRetryAt > Date.now()) break;
-
-          try {
-            item.status = 'syncing';
-            await PosIDB.put('outbox', item);
-
-            // Pastikan PIN staf disertakan jika aksi memerlukan otorisasi
-            if (['CREATE_ORDER', 'UPDATE_STATUS', 'UPDATE_PAYMENT_METHOD', 'SETTLE_KASBON', 'PARTIAL_SETTLE_KASBON', 'ADD_EXPENSE', 'SETTLEMENT_SHIFT', 'CLEAR_TABLE'].includes(String(item.action).toUpperCase())) {
-              if (!item.payload.staff_pin && currentStaffPin) {
-                item.payload.staff_pin = currentStaffPin;
-              }
-            }
-
-            // Kirim langsung ke server
-            let res = await sendActionToSheetsDirect(item.payload);
-
-            // Fallback backward compatibility jika aksi VOID_ORDER belum ada di server
-            if (res && res.status === 'error' && String(res.message).includes('VOID_ORDER')) {
-              res = await sendActionToSheetsDirect({
-                action: "UPDATE_STATUS",
-                orderId: item.orderId,
-                newStatus: "BATAL",
-                catatan: item.payload.reason || 'Void'
-              });
-            }
-
-            if (res && (res.status === 'success' || res.duplicate)) {
-              await PosIDB.delete('outbox', item.id);
-              if (item.orderId) {
-                const ord = appState.orders.find(o => o.orderId === item.orderId);
-                if (ord) {
-                  ord.syncStatus = 'synced';
-                  await PosIDB.put('orders', ord);
-                }
-              }
-              // Tandai entitas non-order sebagai tersinkron
-              const actU = String(item.action || '').toUpperCase();
-              const pl = item.payload || {};
-              if (actU === 'ADD_EXPENSE') {
-                const ex = (appState.pengeluaran || []).find(x => x.id === pl.id);
-                if (ex) ex.syncStatus = 'synced';
-              } else if (actU === 'SETTLE_KASBON' || actU === 'PARTIAL_SETTLE_KASBON') {
-                const pn = (appState.piutangAktif || []).find(x => String(x.order_id) === String(pl.orderId));
-                if (pn) {
-                  delete pn.syncStatus;
-                  try { await PosIDB.put('piutang_aktif', pn); } catch (_) {}
-                }
-              }
-            } else if (res && (res.status === 'wrong_pin' || res.status === 'error' || res.status === 'not_found')) {
-              // Ditolak server. Kesalahan sementara (lock/timeout) -> coba ulang berjeda; selain itu ditandai DITOLAK.
-              const msg = String(res.message || '');
-              const transient = /lock|timeout|too many|server error|service invoked|try again|sibuk/i.test(msg);
-              item.status = 'failed';
-              item.attempts = (item.attempts || 0) + 1;
-              item.lastError = msg || (res.status === 'not_found' ? 'Data tidak ditemukan di server' : (res.status === 'wrong_pin' ? 'PIN ditolak server' : 'Ditolak server'));
-              if (transient && item.attempts < SyncQueue.MAX_ATTEMPTS) {
-                item.nextRetryAt = Date.now() + SyncQueue.backoffMs(item.attempts);
-                await PosIDB.put('outbox', item);
-                break; // jaga urutan: jangan lompati item yang akan dicoba ulang
-              }
-              item.permanent = true;
-              await PosIDB.put('outbox', item);
-              continue; // Jangan mengunci antrean lain di belakangnya
-            } else {
-              // Tidak ada respons (jaringan): coba ulang berjeda, tidak pernah dibuang otomatis
-              item.status = 'failed';
-              item.attempts = (item.attempts || 0) + 1;
-              item.lastError = 'Jaringan tidak merespons';
-              item.nextRetryAt = Date.now() + SyncQueue.backoffMs(item.attempts);
-              await PosIDB.put('outbox', item);
+        try {
+          for (let pass = 0; pass < 20; pass++) {
+            if (!navigator.onLine) {
+              SyncQueue.networkOnline = false;
               break;
             }
-          } catch (err) {
-            item.status = 'failed';
-            item.attempts = (item.attempts || 0) + 1;
-            item.lastError = err.message || 'Koneksi terputus';
-            item.nextRetryAt = Date.now() + SyncQueue.backoffMs(item.attempts);
-            await PosIDB.put('outbox', item);
-            break;
-          }
-        }
+            if (SyncQueue._forceRequested) {
+              SyncQueue._forceRequested = false;
+              await SyncQueue.resetRetry(true);
+            }
 
-        saveState();
-        SyncQueue.isFlushing = false;
-        SyncQueue.updateSyncBadge();
-        renderAll();
+            const pending = await SyncQueue.getRetryableItems();
+            if (pending.length === 0) break;
+
+            // Pilih item yang siap jalan tanpa head-of-line deadlock antar orderId berbeda
+            const nowMs = Date.now();
+            const blockedOrderIds = new Set();
+            const runnable = [];
+            for (const item of pending) {
+              if (!options.force && item.nextRetryAt && item.nextRetryAt > nowMs) {
+                if (item.orderId) blockedOrderIds.add(item.orderId);
+                continue;
+              }
+              if (item.orderId && blockedOrderIds.has(item.orderId)) {
+                continue;
+              }
+              runnable.push(item);
+            }
+            if (runnable.length === 0) break;
+
+            runnable.forEach(it => SyncQueue._attachActiveAuth(it, false));
+
+            // 1. Jalur cepat BATCH_SYNC (kirim hingga 12 item per HTTP request)
+            if (!SyncQueue._batchUnsupported && runnable.length > 1) {
+              const batch = runnable.slice(0, SyncQueue.BATCH_SIZE);
+              for (const b of batch) {
+                b.status = 'syncing';
+                await PosIDB.put('outbox', b);
+              }
+
+              const batchRes = await sendActionToSheetsDirect({
+                action: 'BATCH_SYNC',
+                items: batch.map(b => ({ queueId: b.id, payload: b.payload }))
+              }, { timeoutMs: 25000 });
+
+              if (batchRes && batchRes.status === 'error' && /batch_sync|tidak dikenali/i.test(String(batchRes.message || ''))) {
+                // Server masih versi lama: nonaktifkan batch untuk sesi ini & kembalikan ke pending
+                SyncQueue._batchUnsupported = true;
+                for (const b of batch) {
+                  b.status = 'pending';
+                  await PosIDB.put('outbox', b);
+                }
+              } else if (batchRes && batchRes.status === 'success' && Array.isArray(batchRes.results)) {
+                const byId = new Map(batch.map(b => [b.id, b]));
+                for (const r of batchRes.results) {
+                  const target = byId.get(r.queueId);
+                  if (!target) continue;
+                  byId.delete(r.queueId);
+                  if (r.status === 'success' || r.duplicate) {
+                    await SyncQueue._markItemSuccess(target);
+                  } else {
+                    await SyncQueue._markItemFailure(target, r);
+                  }
+                }
+                // Item yang belum ada di results dikembalikan ke pending
+                for (const leftover of byId.values()) {
+                  leftover.status = 'pending';
+                  await PosIDB.put('outbox', leftover);
+                }
+                SyncQueue.updateSyncBadge(true);
+                continue;
+              } else {
+                // Jaringan/timeout gagal saat kirim batch -> tandai item pertama & kembalikan sisa ke pending lalu berhenti siklus ini
+                await SyncQueue._markItemFailure(batch[0], batchRes);
+                for (let k = 1; k < batch.length; k++) {
+                  batch[k].status = 'pending';
+                  await PosIDB.put('outbox', batch[k]);
+                }
+                break;
+              }
+            }
+
+            // 2. Jalur tunggal (1 item tersisa atau fallback server lama)
+            let networkInterrupted = false;
+            const localBlocked = new Set();
+            for (const item of runnable) {
+              if (!navigator.onLine) { networkInterrupted = true; break; }
+              if (item.orderId && localBlocked.has(item.orderId)) continue;
+
+              try {
+                item.status = 'syncing';
+                await PosIDB.put('outbox', item);
+                SyncQueue._attachActiveAuth(item, false);
+
+                let res = await sendActionToSheetsDirect(item.payload, { timeoutMs: 15000 });
+                if (res && res.status === 'error' && String(res.message).includes('VOID_ORDER')) {
+                  res = await sendActionToSheetsDirect({
+                    action: "UPDATE_STATUS",
+                    orderId: item.orderId,
+                    newStatus: "BATAL",
+                    catatan: item.payload.reason || 'Void',
+                    staleSafe: true
+                  }, { timeoutMs: 15000 });
+                }
+
+                if (res && (res.status === 'success' || res.duplicate)) {
+                  await SyncQueue._markItemSuccess(item);
+                } else {
+                  const failInfo = await SyncQueue._markItemFailure(item, res);
+                  if (failInfo.networkDown) {
+                    networkInterrupted = true;
+                    break;
+                  }
+                  if (failInfo.transient && item.orderId) {
+                    localBlocked.add(item.orderId);
+                  }
+                }
+              } catch (err) {
+                await SyncQueue._markItemFailure(item, null, err.message || 'Koneksi terputus');
+                networkInterrupted = true;
+                break;
+              }
+            }
+            if (networkInterrupted) break;
+            if (SyncQueue._batchUnsupported || runnable.length <= 1) break;
+          }
+        } finally {
+          saveState();
+          SyncQueue.isFlushing = false;
+          SyncQueue.updateSyncBadge();
+          renderAll();
+        }
       },
 
       async discardItem(id) {
@@ -5171,30 +5324,39 @@
     }
 
     // Direct fetch executor untuk SyncQueue
-    async function sendActionToSheetsDirect(payload) {
+    async function sendActionToSheetsDirect(payload, opts = {}) {
       if (!SCRIPT_URL || SCRIPT_URL.includes("TEMPEL_URL")) return null;
+      const timeoutMs = Number(opts.timeoutMs) || 15000;
+      const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      const timerId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
       try {
         const requestPayload = { ...payload };
         requestPayload.requestId = payload.requestId || (crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
-        let resData = null;
-        try {
-          const response = await fetch(SCRIPT_URL, {
-            method: "POST",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(requestPayload)
-          });
-          if (response.ok) {
-            resData = await response.json().catch(() => null);
-          }
-        } catch (netErr) {
-          // Jaringan/CORS gagal: JANGAN dianggap sukses. Item tetap di outbox & dicoba ulang dengan backoff.
-          console.warn('POST ke server gagal, dijadwalkan ulang:', netErr);
-          return null;
+        const response = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(requestPayload),
+          signal: controller ? controller.signal : undefined
+        });
+        if (!response.ok) {
+          const transient = response.status === 429 || response.status >= 500;
+          return { status: 'error', transient, message: `HTTP ${response.status} dari Google Apps Script` };
+        }
+        const resData = await response.json().catch(() => null);
+        if (!resData) {
+          return { status: 'error', transient: true, message: 'Respons server bukan JSON valid (cek izin deployment GAS)' };
         }
         return resData;
-      } catch (err) {
-        return { status: 'error', message: err.message };
+      } catch (netErr) {
+        if (netErr && netErr.name === 'AbortError') {
+          return { status: 'network_error', transient: true, message: `Timeout koneksi (${Math.round(timeoutMs / 1000)}d)` };
+        }
+        console.warn('POST ke server gagal, dijadwalkan ulang:', netErr);
+        return null;
+      } finally {
+        if (timerId) clearTimeout(timerId);
       }
     }
 
@@ -5482,11 +5644,22 @@
 
     async function forceSyncNow() {
       SyncQueue.networkOnline = navigator.onLine;
-      showToast('🚀 Memaksa sinkronisasi antrean ke Google Sheets...', 'cyan');
-      await SyncQueue.resetRetry();
-      await SyncQueue.flush();
-      await fetchOrdersFromSheets(true, true);
+      if (!SyncQueue.networkOnline) {
+        showToast('⚠️ Tablet sedang offline. Periksa koneksi Wi-Fi/data.', 'pink');
+        await openSyncQueueModal();
+        return;
+      }
+      showToast('🚀 Menyinkronkan antrean ke Google Sheets...', 'cyan');
+      await SyncQueue.resetRetry(true);
+      await SyncQueue.flush({ force: true });
+      const remaining = await SyncQueue.getPendingItems();
+      await fetchOrdersFromSheets(false, true);
       await openSyncQueueModal();
+      if (remaining.length === 0) {
+        showToast('✅ Semua antrean berhasil tersinkron!', 'emerald');
+      } else {
+        showToast(`⚠️ Masih tersisa ${remaining.length} antrean — cek alasan pada daftar.`, 'amber');
+      }
     }
 
     function updateSyncBadgeUI(isConnected = true) {
@@ -10218,8 +10391,8 @@
       pollTimerId = setInterval(async () => {
         if (navigator.onLine) {
           SyncQueue.networkOnline = true;
-          await SyncQueue.flush();
-          fetchOrdersFromSheets(false, false);
+          if (!SyncQueue.isFlushing) await SyncQueue.flush();
+          if (!SyncQueue.isFlushing && !isFetchingOrders) fetchOrdersFromSheets(false, false);
         } else {
           SyncQueue.networkOnline = false;
           SyncQueue.updateSyncBadge();
@@ -12749,8 +12922,8 @@ Format jawaban: Berikan jawaban yang ramah, santun, inspiratif, terstruktur deng
       pollTimerId = setInterval(async () => {
         if (navigator.onLine) {
           SyncQueue.networkOnline = true;
-          await SyncQueue.flush();
-          fetchOrdersFromSheets(false, false);
+          if (!SyncQueue.isFlushing) await SyncQueue.flush();
+          if (!SyncQueue.isFlushing && !isFetchingOrders) fetchOrdersFromSheets(false, false);
         } else {
           SyncQueue.networkOnline = false;
           SyncQueue.updateSyncBadge();
