@@ -3,7 +3,7 @@
  * Mengunci file aplikasi utama, Tailwind CSS CDN, dan Google Fonts di memori Tablet Android
  * sehingga aplikasi tetap dapat dibuka 100% normal meskipun Wi-Fi mati & tablet di-restart.
  */
-const CACHE_NAME = 'captain-pos-offline-v5.16';
+const CACHE_NAME = 'captain-pos-offline-v5.18';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -57,7 +57,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Strategi Network-First untuk navigasi HTML utama (agar update terbaru selalu masuk saat online, tapi 100% jalan dari cache saat offline)
-  if (req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+  if (req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/') || url.pathname.endsWith('manifest.json') || url.pathname.endsWith('icon-192.png') || url.pathname.endsWith('icon-512.png')) {
     event.respondWith(
       fetch(req)
         .then((networkRes) => {
