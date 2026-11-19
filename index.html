@@ -397,6 +397,32 @@
       display: inline-block;
       animation: odometerPop 0.32s cubic-bezier(0.22, 1, 0.36, 1);
     }
+
+    /* Mode Fokus Detail: Minimize Header & Filter pada Seluruh Pop-up (Modal) */
+    .modal-minimized-only {
+      display: none !important;
+    }
+    .is-minimized .modal-collapsible-section {
+      display: none !important;
+    }
+    .is-minimized .modal-minimized-only {
+      display: inline-flex !important;
+    }
+    .is-minimized .modal-compact-header {
+      padding-top: 0.5rem !important;
+      padding-bottom: 0.5rem !important;
+    }
+    .is-minimized .modal-header-subtitle,
+    .is-minimized .modal-header-icon {
+      display: none !important;
+    }
+    .is-minimized .modal-compact-subnav {
+      padding-top: 0.35rem !important;
+      padding-bottom: 0.35rem !important;
+    }
+    .is-minimized .modal-detail-expandable {
+      max-height: 75vh !important;
+    }
   </style>
 </head>
 
@@ -523,21 +549,21 @@
         <div class="modern-card p-5 flex flex-col justify-between">
           <div>
             <div class="flex items-center justify-between mb-2">
-              <span class="text-xs font-semibold text-slate-500">Total pemasukan</span>
+              <span onclick="openTransactionHistoryModal()" class="text-xs font-semibold text-slate-500 hover:text-blue-600 cursor-pointer transition" title="Klik untuk buka riwayat pemasukan & transaksi">Total pemasukan</span>
               <button type="button" onclick="openSettlementModal()" id="btnCardSettlement" class="px-3 py-1 rounded-full text-xs font-semibold tracking-wide bg-slate-900 hover:bg-blue-600 text-white shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer" title="Tutup Shift & Rekonsiliasi Kas (Settlement)">Settlement</button>
             </div>
-            <div id="metricTotalIncome" class="font-mono font-bold text-2xl sm:text-3xl text-[#0F172A] tracking-tight">Rp 0</div>
+            <div id="metricTotalIncome" onclick="openTransactionHistoryModal()" title="Klik untuk buka rincian riwayat pemasukan" class="font-mono font-bold text-2xl sm:text-3xl text-[#0F172A] tracking-tight cursor-pointer hover:text-blue-600 transition">Rp 0</div>
           </div>
 
           <!-- Rincian Kas Tunai & QRIS -->
           <div class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
-            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100/80">
+            <div onclick="openTransactionHistoryModal()" title="Klik untuk lihat riwayat pemasukan tunai" class="p-2.5 rounded-xl bg-slate-50 hover:bg-emerald-50/70 border border-slate-100/80 cursor-pointer transition">
               <div class="text-[11px] font-medium text-slate-500 flex items-center gap-1">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Kas tunai
               </div>
               <div id="metricCash" class="font-mono font-bold text-sm text-[#0F172A] mt-0.5">Rp 0</div>
             </div>
-            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100/80">
+            <div onclick="openTransactionHistoryModal()" title="Klik untuk lihat riwayat pemasukan QRIS" class="p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-100/80 cursor-pointer transition">
               <div class="text-[11px] font-medium text-slate-500 flex items-center gap-1">
                 <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> QRIS lunas
               </div>
@@ -612,11 +638,13 @@
           </div>
         </div>
 
-        <!-- KARTU 4: Tren Penjualan 30 Hari (Persis "Health Trend Chart 85% +0.75%" di referensi) -->
-        <div class="modern-card p-5 flex flex-col justify-between">
+        <!-- KARTU 4: Tren Penjualan 30 Hari (Klik untuk analisis tren penjualan semua menu) -->
+        <div onclick="openSalesTrendModal()" title="Klik untuk melihat tren penjualan semua menu" class="modern-card p-5 flex flex-col justify-between cursor-pointer group hover:border-blue-400 transition-all">
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <span class="text-xs font-semibold text-slate-500">Tren penjualan 30 hari</span>
+              <span class="text-xs font-semibold text-slate-500 group-hover:text-blue-600 transition flex items-center gap-1">
+                <span>Tren penjualan 30 hari</span>
+              </span>
               <!-- Indikator Naik / Turun persis badge "+0.75%" di referensi gambar -->
               <span id="salesTrendBadge" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                 +12.4%
@@ -630,26 +658,32 @@
           </div>
 
           <!-- Top 3 Best Seller & Slow Moving Feed -->
-          <div class="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px]">
-            <div>
-              <div class="font-semibold text-[10px] text-emerald-700 flex items-center gap-1 mb-1">
-                <span>🔥</span> Best seller
+          <div class="mt-3 pt-2.5 border-t border-slate-100">
+            <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div onclick="event.stopPropagation(); openSalesTrendModal('best')" class="rounded-lg p-1 -m-1 hover:bg-emerald-50/70 transition" title="Klik untuk urutkan dari Menu Terlaris">
+                <div class="font-semibold text-[10px] text-emerald-700 flex items-center gap-1 mb-1">
+                  <span>🔥</span> Best seller
+                </div>
+                <div id="feedTop3BestSeller" class="space-y-0.5 text-slate-700">
+                  <div>1. Kopi Sejawat</div>
+                  <div>2. V60 Gayo</div>
+                  <div>3. Croissant</div>
+                </div>
               </div>
-              <div id="feedTop3BestSeller" class="space-y-0.5 text-slate-700">
-                <div>1. Kopi Sejawat</div>
-                <div>2. V60 Gayo</div>
-                <div>3. Croissant</div>
+              <div onclick="event.stopPropagation(); openSalesTrendModal('slow')" class="rounded-lg p-1 -m-1 hover:bg-rose-50/70 transition" title="Klik untuk urutkan dari Menu Jarang Keluar">
+                <div class="font-semibold text-[10px] text-[#FF007F] flex items-center gap-1 mb-1">
+                  <span>⚠️</span> Jarang keluar
+                </div>
+                <div id="feedTop3SlowMoving" class="space-y-0.5 text-slate-700">
+                  <div>1. Earl Grey</div>
+                  <div>2. Cold Mint</div>
+                  <div>3. Matcha Fusion</div>
+                </div>
               </div>
             </div>
-            <div>
-              <div class="font-semibold text-[10px] text-[#FF007F] flex items-center gap-1 mb-1">
-                <span>⚠️</span> Jarang keluar
-              </div>
-              <div id="feedTop3SlowMoving" class="space-y-0.5 text-slate-700">
-                <div>1. Earl Grey</div>
-                <div>2. Cold Mint</div>
-                <div>3. Matcha Fusion</div>
-              </div>
+            <div class="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+              <span id="salesTrendMenuCountCaption" class="font-medium">Semua katalog menu</span>
+              <span class="text-blue-600 group-hover:text-blue-700 font-semibold transition">Lihat Semua Menu →</span>
             </div>
           </div>
         </div>
@@ -892,17 +926,22 @@
                   + Tambahan (ronde 2)
                 </span>
               </div>
-              <p class="text-xs text-blue-100/90 mt-0.5">
+              <p class="modal-header-subtitle text-xs text-blue-100/90 mt-0.5">
                 Pesanan baru langsung tampil di KDS Barista untuk segera diracik.
               </p>
             </div>
-            <button type="button" onclick="openCustomItemModal()" class="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold text-xs shadow-md transition active:scale-95 flex items-center gap-1.5 shrink-0" title="Tambah pesanan non-menu atau pesanan khusus dengan nama dan harga bebas">
-              <span>➕</span> <span>Menu Manual</span>
-            </button>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" onclick="toggleModalMinimize('modalPos')" class="btn-modal-minimize px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-semibold text-xs transition flex items-center gap-1" title="Sembunyikan/tampilkan filter & header agar daftar menu lebih luas">
+                <span>▴</span> <span>Ringkas Filter</span>
+              </button>
+              <button type="button" onclick="openCustomItemModal()" class="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold text-xs shadow-md transition active:scale-95 flex items-center gap-1.5 shrink-0" title="Tambah pesanan non-menu atau pesanan khusus dengan nama dan harga bebas">
+                <span>➕</span> <span>Menu Manual</span>
+              </button>
+            </div>
           </div>
 
           <!-- Quick Search Bar (Optimal untuk Keyboard Eksternal: Auto-Refocus, Enter = Pilih #1, Esc = Reset) -->
-          <div class="relative mb-2.5">
+          <div class="modal-collapsible-section relative mb-2.5">
             <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
             <input id="posSearchMenuInput" onkeydown="handlePosSearchKeydown(event)" oninput="posState.searchQuery=this.value; renderPosModalContent()" type="text" autocomplete="off" placeholder="Ketik langsung di keyboard untuk cari menu (Enter = tambah menu ke-1)..." class="w-full min-h-[40px] pl-9 pr-16 py-1.5 rounded-xl bg-white text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-300 shadow-xs transition" />
             <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -912,7 +951,7 @@
           </div>
 
           <!-- Kategori Filter Pills -->
-          <div id="posCategoryList" class="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-none"></div>
+          <div id="posCategoryList" class="modal-collapsible-section flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-none"></div>
         </div>
 
         <!-- Grid Tombol Menu -->
@@ -1163,30 +1202,35 @@
   ====================================================================== -->
   <div id="modalCheckoutTab" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden">
     <div class="bg-white rounded-3xl max-w-lg w-full max-h-[92dvh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
-      <div class="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+      <div class="modal-compact-header px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
         <div class="flex items-center gap-3">
           <span id="checkoutTableBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">Meja 04</span>
           <div>
             <h3 class="font-bold text-lg sm:text-xl text-slate-900 tracking-tight">
               Bayar Open Tab
             </h3>
-            <p class="text-xs text-slate-500">Centang tiket yang dilunasi (Split Bill).</p>
+            <p class="modal-header-subtitle text-xs text-slate-500">Centang tiket yang dilunasi (Split Bill).</p>
           </div>
         </div>
-        <button onclick="closeModal('modalCheckoutTab')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition">✕</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="toggleModalMinimize('modalCheckoutTab')" class="btn-modal-minimize px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition flex items-center gap-1" title="Ringkas filter & kalkulator agar daftar rincian tiket lebih luas">
+            <span>▴</span> <span>Ringkas Filter</span>
+          </button>
+          <button onclick="closeModal('modalCheckoutTab')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition">✕</button>
+        </div>
       </div>
 
       <div class="p-5 space-y-4 flex-1 overflow-y-auto">
-        <div class="flex items-center justify-between text-xs text-slate-500 border-b border-slate-100 pb-2">
+        <div class="modal-collapsible-section flex items-center justify-between text-xs text-slate-500 border-b border-slate-100 pb-2">
           <span>Tamu: <strong id="checkoutCustomerName" class="text-captain-navy font-bold">-</strong></span>
           <span>Tiket: <strong id="checkoutRoundCount" class="font-mono text-captain-navy">1</strong></span>
         </div>
 
         <!-- Filter Cepat Split Bill per Tamu -->
-        <div id="checkoutGuestChips" class="flex items-center gap-1.5 flex-wrap"></div>
+        <div id="checkoutGuestChips" class="modal-collapsible-section flex items-center gap-1.5 flex-wrap"></div>
 
         <!-- Rincian Checklist Tiket Open Tab -->
-        <div id="checkoutRoundsList" class="space-y-2 max-h-56 overflow-y-auto pr-1 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80"></div>
+        <div id="checkoutRoundsList" class="modal-detail-expandable space-y-2 max-h-56 overflow-y-auto pr-1 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80"></div>
 
         <!-- Total Tagihan Terpilih -->
         <div class="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between">
@@ -1198,7 +1242,7 @@
         </div>
 
         <!-- Kalkulator Kembalian Tunai Cepat -->
-        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+        <div class="modal-collapsible-section p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
           <div class="flex items-center justify-between">
             <label class="text-xs font-heading font-bold uppercase text-slate-600">Kalkulator Uang Tunai Diterima</label>
             <div class="flex gap-1">
@@ -1336,15 +1380,20 @@
   ====================================================================== -->
   <div id="modalTableDetail" class="fixed inset-0 z-[70] hidden bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden" onclick="if(event.target===this) closeModal('modalTableDetail')">
     <div class="bg-white rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 animate-scaleUp my-auto overflow-hidden">
-      <div class="px-5 pt-5 pb-3 border-b border-slate-100 shrink-0">
+      <div class="modal-compact-header px-5 pt-5 pb-3 border-b border-slate-100 shrink-0">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
             <h3 id="tableDetailTitle" class="font-extrabold text-lg text-slate-900 font-mono">Meja 01</h3>
-            <p id="tableDetailCustomer" class="text-xs text-slate-600 truncate">Tamu</p>
+            <p id="tableDetailCustomer" class="modal-header-subtitle text-xs text-slate-600 truncate">Tamu</p>
           </div>
-          <button type="button" onclick="closeModal('modalTableDetail')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-sm font-semibold transition active:scale-95 shrink-0">✕</button>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button type="button" onclick="toggleModalMinimize('modalTableDetail')" class="btn-modal-minimize px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition flex items-center gap-1" title="Ringkas header meja">
+              <span>▴</span> <span>Ringkas</span>
+            </button>
+            <button type="button" onclick="closeModal('modalTableDetail')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-sm font-semibold transition active:scale-95 shrink-0">✕</button>
+          </div>
         </div>
-        <div class="flex items-center gap-2 mt-3 text-[11px]">
+        <div class="modal-collapsible-section flex items-center gap-2 mt-3 text-[11px]">
           <span id="tableDetailDwell" class="px-2 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-mono font-bold">⏱️ 0m</span>
           <span id="tableDetailTicketCount" class="px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 font-mono">0 tiket</span>
         </div>
@@ -1404,23 +1453,28 @@
     <div class="bg-white rounded-3xl max-w-6xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-fadeIn my-auto">
 
       <!-- Header Buku Piutang (Modern Clean White dengan Aksen Brand Pink) -->
-      <div class="px-6 py-4 sm:py-5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <div class="modal-compact-header px-6 py-4 sm:py-5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="flex items-center gap-3.5">
-          <div class="w-11 h-11 rounded-2xl bg-[#FFF0F6] text-[#FF007F] border border-[#FFD6E7] flex items-center justify-center text-xl shadow-2xs">📓</div>
+          <div class="modal-header-icon w-11 h-11 rounded-2xl bg-[#FFF0F6] text-[#FF007F] border border-[#FFD6E7] flex items-center justify-center text-xl shadow-2xs">📓</div>
           <div>
             <h3 class="font-bold text-lg sm:text-xl text-slate-900 tracking-tight">
               Buku kasbon & riwayat piutang
             </h3>
-            <p class="text-xs text-slate-500 mt-0.5">
+            <p class="modal-header-subtitle text-xs text-slate-500 mt-0.5">
               Kelola kasbon per pelanggan, pelunasan bertahap/cicilan, dan arsip riwayat lunas.
             </p>
           </div>
         </div>
-        <button type="button" onclick="closeModal('modalPiutang')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition active:scale-95">✕</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="toggleModalMinimize('modalPiutang')" class="btn-modal-minimize px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition flex items-center gap-1.5" title="Ringkas header & kolom pencarian agar detail kasbon lebih leluasa">
+            <span>▴</span> <span>Ringkas Filter</span>
+          </button>
+          <button type="button" onclick="closeModal('modalPiutang')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition active:scale-95">✕</button>
+        </div>
       </div>
 
       <!-- Sub-Navigasi Tab: Kasbon Aktif vs Arsip Riwayat Lunas -->
-      <div class="px-6 py-3 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <div class="modal-compact-subnav px-6 py-3 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="inline-flex p-1 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <button id="tabBtnPiutangAktif" type="button" onclick="switchPiutangTab('aktif')" class="px-4 py-2 rounded-xl font-semibold text-xs bg-blue-600 text-white shadow-sm transition active:scale-95 flex items-center gap-1.5">
             <span>🔴</span> <span>Kasbon aktif (per pelanggan)</span>
@@ -1448,7 +1502,7 @@
         <!-- ==================== TAB 1: KASBON AKTIF (MASTER-DETAIL) ==================== -->
         <div id="viewPiutangAktif" class="space-y-3">
           <!-- Bilah Pencarian Cepat Nama Pelanggan / Nomor Nota -->
-          <div class="relative">
+          <div class="modal-collapsible-section relative">
             <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
             <input id="inputPiutangSearch" type="text" oninput="onPiutangSearchInput(this.value)" placeholder="Cari nama pelanggan kasbon atau nomor Order ID..." class="w-full pl-9 pr-9 py-2 rounded-xl bg-white border border-slate-200 text-xs font-sans text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-2xs transition" />
             <button type="button" onclick="clearPiutangSearch()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-mono">✕</button>
@@ -1462,7 +1516,7 @@
                 <span class="font-bold text-slate-700">Pelanggan Berhutang</span>
                 <span id="piutangCustomerCountBadge" class="whitespace-nowrap shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white text-blue-700 border border-slate-200">0 Orang</span>
               </div>
-              <div id="piutangCustomerListContainer" class="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-[50vh] lg:max-h-[56vh]">
+              <div id="piutangCustomerListContainer" class="modal-detail-expandable flex-1 overflow-y-auto p-2 space-y-1.5 max-h-[50vh] lg:max-h-[56vh]">
                 <!-- Diisi via renderPiutangCustomerList() -->
               </div>
             </div>
@@ -1476,13 +1530,13 @@
 
         <!-- ==================== TAB 2: ARSIP RIWAYAT LUNAS (KOMPAK) ==================== -->
         <div id="viewPiutangArsip" class="hidden space-y-3">
-          <div class="relative">
+          <div class="modal-collapsible-section relative">
             <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
             <input id="inputPiutangArsipSearch" type="text" oninput="onPiutangArsipSearchInput(this.value)" placeholder="Cari riwayat lunas (nama pelanggan, tanggal lunas, atau nomor nota)..." class="w-full pl-9 pr-9 py-2 rounded-xl bg-white border border-slate-200 text-xs font-sans text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-2xs transition" />
             <button type="button" onclick="clearPiutangArsipSearch()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-mono">✕</button>
           </div>
           <div class="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
-            <div class="overflow-x-auto max-h-[54vh]">
+            <div class="modal-detail-expandable overflow-x-auto max-h-[54vh]">
               <table class="w-full text-left border-collapse text-xs">
                 <thead class="bg-emerald-50/70 border-b border-emerald-200 sticky top-0 font-semibold text-emerald-950">
                   <tr>
@@ -1514,23 +1568,28 @@
     <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-fadeIn">
 
       <!-- Header Modal Pengeluaran -->
-      <div class="px-6 py-5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+      <div class="modal-compact-header px-6 py-5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="flex items-center gap-3.5">
-          <div class="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center text-xl shadow-2xs">💸</div>
+          <div class="modal-header-icon w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center text-xl shadow-2xs">💸</div>
           <div>
             <h3 class="font-bold text-lg sm:text-xl text-slate-900 tracking-tight">
               Pencatatan pengeluaran kas operasional
             </h3>
-            <p class="text-xs text-slate-500 mt-0.5">
+            <p class="modal-header-subtitle text-xs text-slate-500 mt-0.5">
               Catat belanja bahan baku darurat & kas keluar agar rekonsiliasi kasir akhir shift seimbang.
             </p>
           </div>
         </div>
-        <button onclick="closeModal('modalPengeluaran')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition">✕</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="toggleModalMinimize('modalPengeluaran')" class="btn-modal-minimize px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition flex items-center gap-1.5" title="Ringkas header, kartu ringkasan & filter agar tabel pengeluaran lebih luas">
+            <span>▴</span> <span>Ringkas Filter</span>
+          </button>
+          <button onclick="closeModal('modalPengeluaran')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition">✕</button>
+        </div>
       </div>
 
       <!-- Sub-Navigasi Tab: Input Baru vs Riwayat Hari Ini -->
-      <div class="px-6 py-3.5 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+      <div class="modal-compact-subnav px-6 py-3.5 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="inline-flex p-1 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <button id="tabBtnExpenseInput" onclick="switchExpenseTab('input')" class="px-4 py-2 rounded-xl font-semibold text-xs bg-blue-600 text-white shadow-sm transition active:scale-95 flex items-center gap-1.5">
             <span>+</span> <span>Catat pengeluaran baru</span>
@@ -1662,7 +1721,7 @@
         <!-- TAB 2: RIWAYAT LIST -->
         <div id="expenseTabListContent" class="space-y-4 hidden">
           <!-- Summary Cards (4 Kolom Seimbang: Shift vs Hari Ini, Laci vs Non-Tunai, Bahan vs Operasional) -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="modal-collapsible-section grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
               <span class="text-[11px] font-medium text-slate-500">Total Shift Ini</span>
               <div id="expenseListSummaryShiftTotal" class="font-mono font-bold text-lg text-slate-900 mt-0.5">Rp 0</div>
@@ -1686,7 +1745,7 @@
           </div>
 
           <!-- Filter Rentang Tanggal & Rekomendasi Cepat (Date Sort & Range) -->
-          <div class="p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90 space-y-2.5">
+          <div class="modal-collapsible-section p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90 space-y-2.5">
             <div class="flex flex-wrap items-center justify-between gap-2.5">
               <!-- Rekomendasi Date Sort Cepat -->
               <div class="flex flex-wrap items-center gap-1.5 text-xs">
@@ -1748,7 +1807,7 @@
 
           <!-- Table -->
           <div class="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-            <div class="overflow-x-auto max-h-[50vh]">
+            <div class="modal-detail-expandable overflow-x-auto max-h-[50vh]">
               <table class="w-full text-left border-collapse text-xs">
                 <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 font-semibold text-slate-600">
                   <tr>
@@ -1791,21 +1850,31 @@
     <div class="bg-white rounded-3xl max-w-6xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
 
       <!-- Header Modal Riwayat Transaksi -->
-      <div class="px-6 py-4 bg-white border-b border-slate-200/80 text-slate-900 flex flex-wrap items-center justify-between gap-3">
+      <div class="modal-compact-header px-6 py-4 bg-white border-b border-slate-200/80 text-slate-900 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shadow-2xs">📜</div>
+          <div class="modal-header-icon w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shadow-2xs">📜</div>
           <div>
-            <h3 class="font-bold text-lg text-slate-900">
-              Riwayat transaksi kasir
-            </h3>
-            <p class="text-xs text-slate-500">Daftar transaksi tersimpan dan status cetak</p>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="font-bold text-lg text-slate-900">
+                Riwayat transaksi kasir
+              </h3>
+              <span id="historyMinimizedQuickBadge" class="modal-minimized-only px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                0 Tiket • Rp 0
+              </span>
+            </div>
+            <p class="modal-header-subtitle text-xs text-slate-500">Daftar transaksi tersimpan dan status cetak</p>
           </div>
         </div>
-        <button onclick="closeModal('modalHistory')" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-mono text-lg transition">✕</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="toggleModalMinimize('modalHistory')" class="btn-modal-minimize px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition flex items-center gap-1.5" title="Ringkas kartu ringkasan & filter agar daftar transaksi lebih luas">
+            <span>▴</span> <span>Ringkas Filter</span>
+          </button>
+          <button onclick="closeModal('modalHistory')" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-mono text-lg transition">✕</button>
+        </div>
       </div>
 
       <!-- Kartu Ringkasan Penjualan Terfilter (Mirip Riwayat Kas Keluar) -->
-      <div class="px-5 pt-4 pb-3 bg-white border-b border-slate-100">
+      <div class="modal-collapsible-section px-5 pt-4 pb-3 bg-white border-b border-slate-100 shrink-0">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
             <span class="text-[11px] font-medium text-slate-500">💰 Total Pemasukan (Terfilter)</span>
@@ -1826,7 +1895,7 @@
       </div>
 
       <!-- Panel Filter & Pencarian Transaksi -->
-      <div class="px-5 py-3.5 bg-slate-50 border-b border-slate-200 space-y-3">
+      <div class="modal-collapsible-section px-5 py-3.5 bg-slate-50 border-b border-slate-200 space-y-3 shrink-0">
         <!-- Baris 0: Filter Cepat Tanggal -->
         <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
           <div class="flex flex-wrap items-center gap-1.5 text-xs">
@@ -1943,21 +2012,26 @@
   ====================================================================== -->
   <div id="modalSyncQueue" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
     <div class="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden">
-      <div class="px-5 py-4 bg-captain-navy text-white flex items-center justify-between">
+      <div class="modal-compact-header px-5 py-4 bg-captain-navy text-white flex items-center justify-between">
         <div class="flex items-center gap-2.5">
-          <span class="w-9 h-9 rounded-xl bg-captain-cyan text-captain-navy font-bold flex items-center justify-center text-base">⚡</span>
+          <span class="modal-header-icon w-9 h-9 rounded-xl bg-captain-cyan text-captain-navy font-bold flex items-center justify-center text-base">⚡</span>
           <div>
             <h3 class="font-heading font-extrabold text-lg uppercase tracking-wider">
               Antrean Sinkronisasi Lokal (IndexedDB)
             </h3>
-            <p class="text-xs text-slate-300">Local-First POS: Transaksi selalu tersimpan aman di perangkat</p>
+            <p class="modal-header-subtitle text-xs text-slate-300">Local-First POS: Transaksi selalu tersimpan aman di perangkat</p>
           </div>
         </div>
-        <button onclick="closeModal('modalSyncQueue')" class="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center font-mono">✕</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="toggleModalMinimize('modalSyncQueue')" class="btn-modal-minimize px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1" title="Ringkas header & kartu status">
+            <span>▴</span> <span>Ringkas</span>
+          </button>
+          <button onclick="closeModal('modalSyncQueue')" class="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center font-mono">✕</button>
+        </div>
       </div>
 
       <div class="p-5 space-y-4 text-xs sm:text-sm">
-        <div class="grid grid-cols-2 gap-3">
+        <div class="modal-collapsible-section grid grid-cols-2 gap-3">
           <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
             <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Status Koneksi Internet</span>
             <div id="queueNetworkStatus" class="font-mono font-bold text-sm text-emerald-600 flex items-center gap-1.5">
@@ -1977,7 +2051,7 @@
             <span>Daftar Transaksi Outbox</span>
             <span id="queueStorageEngine" class="text-slate-600 font-bold">v5.21 • IndexedDB</span>
           </div>
-          <div id="queueListContainer" class="max-h-60 overflow-y-auto divide-y divide-slate-100 p-2 text-xs">
+          <div id="queueListContainer" class="modal-detail-expandable max-h-60 overflow-y-auto divide-y divide-slate-100 p-2 text-xs">
             <div class="py-6 text-center text-slate-400 font-mono text-xs">Antrean kosong. Semua transaksi tersinkron.</div>
           </div>
         </div>
@@ -2072,20 +2146,25 @@
     <div class="bg-white rounded-3xl max-w-lg w-full max-h-[92dvh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-fadeIn my-auto">
       
       <!-- Header Modal Settlement: Elegan, Bersih Tanpa Ikon Gembok -->
-      <div class="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+      <div class="modal-compact-header px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
         <div>
           <h3 class="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
             Settlement Kasir
           </h3>
-          <p class="text-[11px] text-slate-500">
+          <p class="modal-header-subtitle text-[11px] text-slate-500">
             Rekonsiliasi uang kas fisik laci sebelum pergantian shift / closing
           </p>
         </div>
-        <button type="button" onclick="closeModal('modalSettlement')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-xs font-semibold transition active:scale-95">✕</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="toggleModalMinimize('modalSettlement')" class="btn-modal-minimize px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition flex items-center gap-1" title="Ringkas rincian metrik agar area input & riwayat lebih leluasa">
+            <span>▴</span> <span>Ringkas</span>
+          </button>
+          <button type="button" onclick="closeModal('modalSettlement')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-xs font-semibold transition active:scale-95">✕</button>
+        </div>
       </div>
 
       <!-- Segmented Tab Navigation: Form vs Riwayat Settlement -->
-      <div class="px-6 pt-3 pb-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2 shrink-0">
+      <div class="modal-compact-subnav px-6 pt-3 pb-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2 shrink-0">
         <button id="tabSettlementForm" type="button" onclick="switchSettlementTab('form')" class="flex-1 py-2 px-3 rounded-xl text-xs font-semibold bg-blue-600 text-white shadow-2xs transition cursor-pointer">
           Form Settlement
         </button>
@@ -2113,39 +2192,41 @@
           </div>
 
           <!-- 1. Total Pemasukan Shift -->
-          <div class="flex justify-between items-center text-slate-800">
-            <span class="font-bold text-slate-900">1. Total Pemasukan Shift:</span>
-            <span id="settlementTotalRevenue" class="font-mono font-extrabold text-blue-600 text-sm">Rp 0</span>
-          </div>
+          <div class="modal-collapsible-section space-y-2.5">
+            <div class="flex justify-between items-center text-slate-800">
+              <span class="font-bold text-slate-900">1. Total Pemasukan Shift:</span>
+              <span id="settlementTotalRevenue" class="font-mono font-extrabold text-blue-600 text-sm">Rp 0</span>
+            </div>
 
-          <!-- 2 & 3. Kas Masuk Tunai vs QRIS -->
-          <div class="pl-3 space-y-1 text-slate-600 border-l-2 border-blue-300">
-            <div class="flex justify-between">
-              <span>2. Pemasukan Cash (Tunai):</span>
-              <span id="settlementSysCash" class="font-mono font-bold text-slate-800">Rp 0</span>
+            <!-- 2 & 3. Kas Masuk Tunai vs QRIS -->
+            <div class="pl-3 space-y-1 text-slate-600 border-l-2 border-blue-300">
+              <div class="flex justify-between">
+                <span>2. Pemasukan Cash (Tunai):</span>
+                <span id="settlementSysCash" class="font-mono font-bold text-slate-800">Rp 0</span>
+              </div>
+              <div class="flex justify-between">
+                <span>3. Pemasukan QRIS:</span>
+                <span id="settlementSysQris" class="font-mono font-bold text-slate-800">Rp 0</span>
+              </div>
             </div>
-            <div class="flex justify-between">
-              <span>3. Pemasukan QRIS:</span>
-              <span id="settlementSysQris" class="font-mono font-bold text-slate-800">Rp 0</span>
-            </div>
-          </div>
 
-          <!-- 4 & 5. Pengeluaran Cash vs QRIS -->
-          <div class="pt-1.5 border-t border-slate-200/80 space-y-1">
-            <div class="flex justify-between text-rose-700">
-              <span class="font-medium">4. Pengeluaran Cash (Laci):</span>
-              <span id="settlementSysExpense" class="font-mono font-bold">- Rp 0</span>
+            <!-- 4 & 5. Pengeluaran Cash vs QRIS -->
+            <div class="pt-1.5 border-t border-slate-200/80 space-y-1">
+              <div class="flex justify-between text-rose-700">
+                <span class="font-medium">4. Pengeluaran Cash (Laci):</span>
+                <span id="settlementSysExpense" class="font-mono font-bold">- Rp 0</span>
+              </div>
+              <div class="flex justify-between text-slate-600">
+                <span class="font-medium">5. Pengeluaran QRIS / Rekening:</span>
+                <span id="settlementSysQrisExpense" class="font-mono font-bold">- Rp 0</span>
+              </div>
             </div>
-            <div class="flex justify-between text-slate-600">
-              <span class="font-medium">5. Pengeluaran QRIS / Rekening:</span>
-              <span id="settlementSysQrisExpense" class="font-mono font-bold">- Rp 0</span>
-            </div>
-          </div>
 
-          <!-- 6. Total Kasbon -->
-          <div class="pt-1.5 border-t border-slate-200/80 flex justify-between text-amber-800">
-            <span class="font-medium">6. Total Kasbon / Open Tab Baru:</span>
-            <span id="settlementSysKasbon" class="font-mono font-bold">Rp 0</span>
+            <!-- 6. Total Kasbon -->
+            <div class="pt-1.5 border-t border-slate-200/80 flex justify-between text-amber-800">
+              <span class="font-medium">6. Total Kasbon / Open Tab Baru:</span>
+              <span id="settlementSysKasbon" class="font-mono font-bold">Rp 0</span>
+            </div>
           </div>
 
           <!-- Target Uang Fisik Laci -->
@@ -2214,7 +2295,7 @@
             Refresh
           </button>
         </div>
-        <div id="settlementHistoryList" class="space-y-3 max-h-[58vh] overflow-y-auto pr-1">
+        <div id="settlementHistoryList" class="modal-detail-expandable space-y-3 max-h-[58vh] overflow-y-auto pr-1">
           <!-- Item riwayat dimuat dinamis -->
         </div>
       </div>
@@ -2225,23 +2306,29 @@
     <div class="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-fadeIn">
       
       <!-- Header Pengaturan (Modern Clean White) -->
-      <div class="px-6 py-5 bg-white border-b border-slate-100 flex items-center justify-between">
+      <div class="modal-compact-header px-6 py-5 bg-white border-b border-slate-100 flex items-center justify-between gap-2">
         <div class="flex items-center gap-3.5">
-          <div class="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shadow-2xs">⚙️</div>
+          <div class="modal-header-icon w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shadow-2xs">⚙️</div>
           <div>
             <h3 class="font-bold text-lg sm:text-xl text-slate-900 tracking-tight">
               Pengaturan Sistem
             </h3>
-            <p class="text-xs text-slate-500 mt-0.5">
+            <p class="modal-header-subtitle text-xs text-slate-500 mt-0.5">
               Konfigurasi operasional kasir, printer thermal, audio, serta integrasi sistem.
             </p>
           </div>
         </div>
-        <button onclick="closeModal('modalSettings')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition">✕</button>
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="toggleModalMinimize('modalSettings')" title="Sembunyikan/Tampilkan Header" class="btn-modal-minimize px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer">
+            <span class="minimize-icon">▴</span>
+            <span class="minimize-label">Ringkas</span>
+          </button>
+          <button onclick="closeModal('modalSettings')" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-semibold transition">✕</button>
+        </div>
       </div>
 
       <!-- Tab Navigation Bar: Operasional Kasir vs Sistem & Integrasi -->
-      <div class="px-6 pt-3 pb-0 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto">
+      <div class="modal-compact-subnav px-6 pt-3 pb-0 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto">
         <div class="flex items-center gap-2">
           <button type="button" id="tabBtnSettingsKasir" onclick="switchSettingsTab('kasir')" class="px-4 py-2.5 rounded-t-xl text-xs sm:text-sm font-bold border-b-2 transition flex items-center gap-2 border-blue-600 text-blue-600 bg-white shadow-2xs">
             <span>🖨️</span> <span>Operasional Kasir</span>
@@ -2258,7 +2345,7 @@
       </div>
 
       <!-- Scrollable Content Body -->
-      <div class="p-6 text-xs sm:text-sm font-sans max-h-[76vh] overflow-y-auto">
+      <div class="modal-detail-expandable p-6 text-xs sm:text-sm font-sans max-h-[76vh] overflow-y-auto">
 
         <!-- ==========================================
              TAB 1: OPERASIONAL KASIR (BEBAS AKSES)
@@ -2616,6 +2703,145 @@
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL: ANALISIS TREN PENJUALAN SEMUA MENU
+  ====================================================================== -->
+  <div id="modalSalesTrend" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-5xl w-full max-h-[92dvh] shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+      <!-- Header Modal -->
+      <div class="modal-compact-header px-4 sm:px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="modal-header-icon w-10 h-10 rounded-2xl bg-white/15 flex items-center justify-center text-xl shrink-0">📊</div>
+          <div class="min-w-0">
+            <h3 class="font-heading font-extrabold text-base sm:text-lg tracking-wide leading-tight flex flex-wrap items-center gap-2">
+              <span>Tren Penjualan Semua Menu</span>
+              <span id="trendMinimizedQuickBadge" class="modal-minimized-only px-2 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-mono font-semibold"></span>
+            </h3>
+            <p id="salesTrendModalSubtitle" class="modal-header-subtitle text-[11px] text-blue-100 truncate">
+              Evaluasi menu terlaris, menu jarang keluar, omzet & tren harian
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" id="btnTrendLoadArchive" onclick="loadArchiveForSalesTrend(this)" class="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition flex items-center gap-1.5" title="Tarik data arsip >35 hari dari Google Sheets">
+            <span>📦</span> <span class="hidden sm:inline">Muat Arsip (&gt;35 Hari)</span>
+          </button>
+          <button type="button" onclick="toggleModalMinimize('modalSalesTrend')" title="Sembunyikan/Tampilkan Ringkasan, Grafik & Filter" class="btn-modal-minimize px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer">
+            <span class="minimize-icon">▴</span>
+            <span class="minimize-label">Ringkas Filter</span>
+          </button>
+          <button type="button" onclick="closeModal('modalSalesTrend')" title="Tutup (Esc)" class="w-8 h-8 rounded-xl bg-white/15 hover:bg-white/25 text-white flex items-center justify-center font-mono transition">✕</button>
+        </div>
+      </div>
+
+      <!-- Body Scrollable -->
+      <div class="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+        <!-- 4 Kartu Ringkasan -->
+        <div class="modal-collapsible-section grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Porsi Terjual</span>
+            <div id="trendSummaryTotalQty" class="font-mono font-extrabold text-lg sm:text-xl text-slate-900 mt-0.5">0 porsi</div>
+            <span id="trendSummaryOrderCount" class="text-[11px] text-slate-500">dari 0 pesanan</span>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Nilai Menu</span>
+            <div id="trendSummaryTotalRev" class="font-mono font-extrabold text-lg sm:text-xl text-blue-600 mt-0.5">Rp 0</div>
+            <span id="trendSummaryActiveMenuCount" class="text-[11px] text-slate-500">0 menu terjual</span>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/80">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">🔥 #1 Paling Laris</span>
+            <div id="trendSummaryTopMenuName" class="font-bold text-sm sm:text-base text-slate-900 truncate mt-0.5">-</div>
+            <span id="trendSummaryTopMenuMeta" class="text-[11px] font-mono text-emerald-700">0 porsi (0%)</span>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200/80">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">⚠️ Belum Terjual (0x)</span>
+            <div id="trendSummaryZeroMenuCount" class="font-mono font-extrabold text-lg sm:text-xl text-rose-600 mt-0.5">0 menu</div>
+            <button type="button" onclick="setSalesTrendSort('slow')" class="text-[11px] font-semibold text-rose-700 hover:underline">Lihat menu jarang keluar →</button>
+          </div>
+        </div>
+
+        <!-- Panel Grafik Harian 30 Hari (Semua Menu atau Per Menu yang Diklik) -->
+        <div class="modal-collapsible-section p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span id="trendDetailChartTitle" class="text-xs sm:text-sm font-bold text-slate-800 truncate">
+                📈 Grafik Tren Harian (30 Hari Terakhir — Semua Menu)
+              </span>
+              <span id="trendDetailChartBadge" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                0%
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="trendDetailChartHint" class="text-[11px] text-slate-400">Klik baris menu di bawah untuk melihat grafik per menu</span>
+              <button type="button" id="btnResetFocusedMenu" onclick="selectSalesTrendFocusMenu('')" class="hidden px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold transition">
+                ✕ Kembali ke Semua Menu
+              </button>
+            </div>
+          </div>
+          <div id="trendModalChartContainer" class="w-full h-28 pt-2 flex items-end"></div>
+          <div id="trendModalChartAxis" class="flex items-center justify-between text-[10px] font-mono text-slate-400 mt-1 pt-1 border-t border-slate-200/70"></div>
+        </div>
+
+        <!-- Baris Filter: Periode, Kategori, Pencarian & Urutan -->
+        <div class="modal-collapsible-section space-y-2.5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <!-- Filter Periode Waktu -->
+            <div id="trendPeriodButtons" class="inline-flex flex-wrap items-center p-1 rounded-xl bg-slate-100 border border-slate-200/80 text-xs font-semibold gap-1">
+              <button type="button" data-period="today" onclick="setSalesTrendPeriod('today')" class="px-3 py-1.5 rounded-lg transition">Hari Ini</button>
+              <button type="button" data-period="7d" onclick="setSalesTrendPeriod('7d')" class="px-3 py-1.5 rounded-lg transition">7 Hari</button>
+              <button type="button" data-period="30d" onclick="setSalesTrendPeriod('30d')" class="px-3 py-1.5 rounded-lg transition">30 Hari</button>
+              <button type="button" data-period="all" onclick="setSalesTrendPeriod('all')" class="px-3 py-1.5 rounded-lg transition">Semua Riwayat</button>
+            </div>
+
+            <!-- Urutan (Sort) -->
+            <div id="trendSortButtons" class="inline-flex flex-wrap items-center p-1 rounded-xl bg-slate-100 border border-slate-200/80 text-xs font-semibold gap-1">
+              <button type="button" data-sort="best" onclick="setSalesTrendSort('best')" class="px-2.5 py-1.5 rounded-lg transition">🔥 Terlaris</button>
+              <button type="button" data-sort="slow" onclick="setSalesTrendSort('slow')" class="px-2.5 py-1.5 rounded-lg transition">⚠️ Jarang Keluar</button>
+              <button type="button" data-sort="revenue" onclick="setSalesTrendSort('revenue')" class="px-2.5 py-1.5 rounded-lg transition">💰 Omzet</button>
+              <button type="button" data-sort="az" onclick="setSalesTrendSort('az')" class="px-2.5 py-1.5 rounded-lg transition">🔤 A–Z</button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Pencarian Menu -->
+            <div class="relative flex-1 min-w-[200px]">
+              <input id="trendSearchMenuInput" type="search" autocomplete="off" oninput="renderSalesTrendModal()" placeholder="Cari nama menu atau kategori..." class="w-full pl-3.5 pr-8 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white" />
+            </div>
+            <!-- Pill Kategori -->
+            <div id="trendCategoryPills" class="flex items-center gap-1.5 overflow-x-auto py-0.5 max-w-full"></div>
+          </div>
+        </div>
+
+        <!-- Tabel Semua Menu -->
+        <div class="border border-slate-200 rounded-2xl overflow-hidden">
+          <div class="modal-detail-expandable overflow-x-auto max-h-[380px] overflow-y-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead class="bg-slate-100 text-slate-600 font-mono text-[11px] uppercase sticky top-0 z-10 border-b border-slate-200">
+                <tr>
+                  <th class="py-2.5 px-3 w-12">#</th>
+                  <th class="py-2.5 px-3">Menu & Kategori</th>
+                  <th class="py-2.5 px-3 text-right">Harga</th>
+                  <th class="py-2.5 px-3 text-center">Tren 7H</th>
+                  <th class="py-2.5 px-3 min-w-[170px]">Porsi Terjual</th>
+                  <th class="py-2.5 px-3 text-right">Omzet</th>
+                </tr>
+              </thead>
+              <tbody id="salesTrendTableBody" class="divide-y divide-slate-100 bg-white"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Modal -->
+      <div class="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0">
+        <span id="salesTrendFooterNote">Menampilkan seluruh menu katalog</span>
+        <button type="button" onclick="closeModal('modalSalesTrend')" class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition">
+          Tutup
+        </button>
       </div>
     </div>
   </div>
@@ -7058,7 +7284,7 @@
       posState.selectedCategory = 'Semua';
       posState.cart = [];
       posState.billyardDiscountEnabled = true;
-      posState.cartExpanded = false;
+      posState.cartExpanded = Boolean(document.getElementById('modalPos')?.classList.contains('is-minimized'));
 
       posState.dismissedOccupiedLoc = null;
       if (prefillLocation) {
@@ -8396,6 +8622,8 @@
       const sumEl = document.getElementById('historyFoundSum');
       if (countEl) countEl.textContent = filtered.length;
       if (sumEl) sumEl.textContent = formatRupiah(validTotalSum);
+      const quickBadge = document.getElementById('historyMinimizedQuickBadge');
+      if (quickBadge) quickBadge.textContent = `${filtered.length} trx • ${formatRupiah(totalRevenueFiltered)}`;
 
       if (filtered.length === 0) {
         tbody.innerHTML = `
@@ -8935,16 +9163,21 @@
 
       // 2. Hitung Top 3 Best Seller & Slow Moving
       const salesCountMap = {};
-      MENU_CATALOG.forEach(m => { salesCountMap[m.name] = 0; });
+      const cardCatByName = new Map();
+      const cardCatById = new Map();
+      MENU_CATALOG.forEach(m => {
+        salesCountMap[m.name] = 0;
+        cardCatByName.set(String(m.name || '').trim().toLowerCase(), m);
+        if (m.id) cardCatById.set(String(m.id), m);
+      });
 
       appState.orders.forEach(o => {
-        if (o.status !== 'BATAL' && Array.isArray(o.items)) {
+        if (o && o.status !== 'BATAL' && o.status !== 'KADALUARSA' && Array.isArray(o.items)) {
           o.items.forEach(it => {
-            if (salesCountMap.hasOwnProperty(it.name)) {
-              salesCountMap[it.name] += (Number(it.qty) || 1);
-            } else {
-              salesCountMap[it.name] = (salesCountMap[it.name] || 0) + (Number(it.qty) || 1);
-            }
+            const matched = resolveOrderMenuEntry(it, cardCatByName, cardCatById);
+            const key = matched ? matched.name : String(it.name || '').trim();
+            if (!key) return;
+            salesCountMap[key] = (salesCountMap[key] || 0) + (Number(it.qty) || 1);
           });
         }
       });
@@ -8968,6 +9201,471 @@
       const slow3El = document.getElementById('feedTop3SlowMoving');
       if (slow3El) {
         slow3El.innerHTML = slow3.map((it, idx) => `<div class="truncate text-slate-500"><strong class="text-slate-700">${idx + 1}.</strong> ${it[0]} <span class="text-[10px] text-amber-600 font-mono">(${it[1]})</span></div>`).join('');
+      }
+
+      const countCaptionEl = document.getElementById('salesTrendMenuCountCaption');
+      if (countCaptionEl) {
+        const soldMenuCount = sortedMenu.filter(it => it[1] > 0).length;
+        countCaptionEl.textContent = `${soldMenuCount}/${sortedMenu.length} menu terjual`;
+      }
+
+      const modalEl = document.getElementById('modalSalesTrend');
+      if (modalEl && !modalEl.classList.contains('hidden')) {
+        renderSalesTrendModal();
+      }
+    }
+
+    // =====================================================================
+    // ANALISIS TREN PENJUALAN SEMUA MENU (MODAL INTERAKTIF KARTU 4)
+    // =====================================================================
+    const salesTrendState = {
+      period: '30d',     // 'today' | '7d' | '30d' | 'all'
+      sort: 'best',      // 'best' | 'slow' | 'revenue' | 'az'
+      category: 'Semua',
+      focusedMenuKey: '' // jika diisi, grafik 30 hari menampilkan tren harian menu tersebut
+    };
+
+    const CATEGORY_LABEL_MAP = {
+      bc: '⭐ Barista Choice',
+      coffee: '☕ Coffee Series',
+      latte: '🥛 Non-Coffee : Latte',
+      tea: '🍵 Non-Coffee : Tea',
+      squash: '🍹 Non-Coffee : Squash',
+      chef: '👨‍🍳 Chef Approval',
+      hangout: '🍛 Hangout Meals',
+      indomie: '🍜 Indomie',
+      snack: '🍟 Snacks',
+      manis: '🧇 Kudapan Manis'
+    };
+
+    function formatMenuCategoryLabel(cat, mainTab) {
+      const raw = String(cat || '').trim();
+      const lower = raw.toLowerCase();
+      if (CATEGORY_LABEL_MAP[lower]) return CATEGORY_LABEL_MAP[lower];
+      if (raw) return raw;
+      return mainTab === 'makanan' ? '🍟 Makanan' : '☕ Minuman';
+    }
+
+    function openSalesTrendModal(initialSort) {
+      if (initialSort && ['best', 'slow', 'revenue', 'az'].includes(initialSort)) {
+        salesTrendState.sort = initialSort;
+      }
+      openModal('modalSalesTrend');
+    }
+
+    function setSalesTrendPeriod(period) {
+      salesTrendState.period = period;
+      renderSalesTrendModal();
+    }
+
+    function setSalesTrendSort(sortKey) {
+      salesTrendState.sort = sortKey;
+      renderSalesTrendModal();
+    }
+
+    function setSalesTrendCategory(cat) {
+      salesTrendState.category = cat;
+      renderSalesTrendModal();
+    }
+
+    function selectSalesTrendFocusMenu(menuName) {
+      salesTrendState.focusedMenuKey = (salesTrendState.focusedMenuKey === menuName) ? '' : String(menuName || '');
+      renderSalesTrendModal();
+    }
+
+    async function loadArchiveForSalesTrend(btn) {
+      if (typeof loadArchiveHistoryFromServer === 'function') {
+        await loadArchiveHistoryFromServer(btn);
+        salesTrendState.period = 'all';
+        renderCard4Analytics();
+        renderSalesTrendModal();
+      }
+    }
+
+    function resolveOrderMenuEntry(it, catalogByName, catalogById) {
+      if (!it) return null;
+      if (it.id && catalogById.has(String(it.id))) return catalogById.get(String(it.id));
+      const rawName = String(it.name || '').trim();
+      if (!rawName) return null;
+      const lower = rawName.toLowerCase();
+      if (catalogByName.has(lower)) return catalogByName.get(lower);
+      const baseLower = rawName.replace(/\s*\(.*\)$/, '').trim().toLowerCase();
+      if (catalogByName.has(baseLower)) return catalogByName.get(baseLower);
+      return null;
+    }
+
+    function renderSalesTrendModal() {
+      const now = new Date();
+      const padZero = n => String(n).padStart(2, '0');
+      const todayStartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const last7StartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).getTime();
+      const prev7StartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13).getTime();
+      const last30StartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29).getTime();
+
+      let periodStartMs = 0;
+      if (salesTrendState.period === 'today') periodStartMs = todayStartMs;
+      else if (salesTrendState.period === '7d') periodStartMs = last7StartMs;
+      else if (salesTrendState.period === '30d') periodStartMs = last30StartMs;
+
+      // Siapkan peta seluruh menu dari MENU_CATALOG
+      const menuMap = new Map();
+      const catalogByName = new Map();
+      const catalogById = new Map();
+
+      (Array.isArray(MENU_CATALOG) ? MENU_CATALOG : []).forEach(m => {
+        const name = String(m.name || '').trim();
+        if (!name) return;
+        const entry = {
+          id: String(m.id || name),
+          name: name,
+          category: String(m.category || '').trim(),
+          categoryLabel: formatMenuCategoryLabel(m.category, m.mainTab),
+          mainTab: String(m.mainTab || ''),
+          price: Number(m.price) || 0,
+          badge: String(m.badge || ''),
+          isCatalog: true,
+          qty: 0,
+          revenue: 0,
+          orderCount: 0,
+          last7Qty: 0,
+          prev7Qty: 0,
+          dailyQty30: {},
+          dailyRev30: {}
+        };
+        menuMap.set(name, entry);
+        catalogByName.set(name.toLowerCase(), entry);
+        if (m.id) catalogById.set(String(m.id), entry);
+      });
+
+      // Siapkan 30 hari terakhir untuk grafik harian
+      const days30 = [];
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const ymd = `${d.getFullYear()}-${padZero(d.getMonth() + 1)}-${padZero(d.getDate())}`;
+        days30.push({
+          ymd,
+          label: `${padZero(d.getDate())}/${padZero(d.getMonth() + 1)}`,
+          totalRev: 0,
+          totalQty: 0
+        });
+      }
+      const dayIndexByYmd = {};
+      days30.forEach((d, idx) => { dayIndexByYmd[d.ymd] = idx; });
+
+      let validOrdersInPeriod = 0;
+      let totalRealOrdersAny = 0;
+
+      (appState.orders || []).forEach(o => {
+        if (!o || o.status === 'BATAL' || o.status === 'KADALUARSA' || !Array.isArray(o.items)) return;
+        const dObj = parseOrderTimestampToDateObj(o.timestamp, o.createdAtMs);
+        const orderMs = (dObj && !isNaN(dObj.getTime())) ? dObj.getTime() : 0;
+        const ymd = orderMs > 0
+          ? `${dObj.getFullYear()}-${padZero(dObj.getMonth() + 1)}-${padZero(dObj.getDate())}`
+          : '';
+        const inSelectedPeriod = (periodStartMs === 0) || (orderMs >= periodStartMs);
+        if (inSelectedPeriod) validOrdersInPeriod++;
+        totalRealOrdersAny++;
+
+        const seenInOrder = new Set();
+        o.items.forEach(it => {
+          const qty = Math.max(1, Number(it.qty) || 1);
+          let entry = resolveOrderMenuEntry(it, catalogByName, catalogById);
+          if (!entry) {
+            const customName = String(it.name || 'Menu Custom').trim();
+            if (!menuMap.has(customName)) {
+              entry = {
+                id: 'custom_' + customName,
+                name: customName,
+                category: 'custom',
+                categoryLabel: '➕ Menu Custom / Lainnya',
+                mainTab: '',
+                price: Number(it.price) || 0,
+                badge: 'Custom',
+                isCatalog: false,
+                qty: 0,
+                revenue: 0,
+                orderCount: 0,
+                last7Qty: 0,
+                prev7Qty: 0,
+                dailyQty30: {},
+                dailyRev30: {}
+              };
+              menuMap.set(customName, entry);
+            } else {
+              entry = menuMap.get(customName);
+            }
+          }
+
+          const unitPrice = (Number(it.price) > 0) ? Number(it.price) : (entry.price || 0);
+          const itemRev = qty * unitPrice;
+
+          if (inSelectedPeriod) {
+            entry.qty += qty;
+            entry.revenue += itemRev;
+            if (!seenInOrder.has(entry.name)) {
+              entry.orderCount++;
+              seenInOrder.add(entry.name);
+            }
+          }
+
+          if (orderMs >= last7StartMs) {
+            entry.last7Qty += qty;
+          } else if (orderMs >= prev7StartMs && orderMs < last7StartMs) {
+            entry.prev7Qty += qty;
+          }
+
+          if (ymd && dayIndexByYmd[ymd] !== undefined) {
+            entry.dailyQty30[ymd] = (entry.dailyQty30[ymd] || 0) + qty;
+            entry.dailyRev30[ymd] = (entry.dailyRev30[ymd] || 0) + itemRev;
+            days30[dayIndexByYmd[ymd]].totalQty += qty;
+            days30[dayIndexByYmd[ymd]].totalRev += itemRev;
+          }
+        });
+      });
+
+      // Fallback demo jika belum ada pesanan sama sekali
+      if (totalRealOrdersAny === 0) {
+        const demoWeights = [
+          ['Es Kopi Susu Sejawat', 48, 42],
+          ['V60 Specialty Gayo', 26, 22],
+          ['Croissant Butter', 19, 15],
+          ['Dirty Latte', 16, 14],
+          ['Specialty Pour Over', 12, 13]
+        ];
+        demoWeights.forEach(([mName, q, prevQ]) => {
+          const e = menuMap.get(mName);
+          if (e) {
+            e.qty = q;
+            e.revenue = q * (e.price || 18000);
+            e.last7Qty = Math.round(q * 0.35);
+            e.prev7Qty = Math.round(prevQ * 0.3);
+          }
+        });
+      }
+
+      const allMenus = Array.from(menuMap.values());
+      const grandTotalQty = allMenus.reduce((s, m) => s + m.qty, 0);
+      const grandTotalRev = allMenus.reduce((s, m) => s + m.revenue, 0);
+      const activeSoldMenus = allMenus.filter(m => m.qty > 0).length;
+      const zeroSoldMenus = allMenus.filter(m => m.qty === 0).length;
+      const topRankedByQty = [...allMenus].sort((a, b) => (b.qty - a.qty) || (b.revenue - a.revenue));
+      const top1 = topRankedByQty[0];
+      const maxQtyGlobal = Math.max(1, top1 ? top1.qty : 1);
+
+      // Update 4 Kartu Ringkasan
+      const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+      setTxt('trendSummaryTotalQty', `${grandTotalQty} porsi`);
+      setTxt('trendSummaryOrderCount', `dari ${validOrdersInPeriod} pesanan`);
+      setTxt('trendSummaryTotalRev', formatRupiah(grandTotalRev));
+      setTxt('trendSummaryActiveMenuCount', `${activeSoldMenus} dari ${allMenus.length} menu terjual`);
+      if (top1 && top1.qty > 0) {
+        const share = grandTotalQty > 0 ? ((top1.qty / grandTotalQty) * 100).toFixed(1) : '0.0';
+        setTxt('trendSummaryTopMenuName', top1.name);
+        setTxt('trendSummaryTopMenuMeta', `${top1.qty} porsi (${share}% total) • ${formatRupiah(top1.revenue)}`);
+      } else {
+        setTxt('trendSummaryTopMenuName', 'Belum ada');
+        setTxt('trendSummaryTopMenuMeta', '0 porsi (0%)');
+      }
+      setTxt('trendSummaryZeroMenuCount', `${zeroSoldMenus} menu`);
+
+      // Update Tombol Periode & Sortir
+      document.querySelectorAll('#trendPeriodButtons button[data-period]').forEach(btn => {
+        const active = btn.getAttribute('data-period') === salesTrendState.period;
+        btn.className = active
+          ? 'px-3 py-1.5 rounded-lg bg-slate-900 text-white font-bold shadow-2xs transition'
+          : 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition';
+      });
+      document.querySelectorAll('#trendSortButtons button[data-sort]').forEach(btn => {
+        const active = btn.getAttribute('data-sort') === salesTrendState.sort;
+        btn.className = active
+          ? 'px-2.5 py-1.5 rounded-lg bg-blue-600 text-white font-bold shadow-2xs transition'
+          : 'px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition';
+      });
+
+      // Render Pill Kategori
+      const catContainer = document.getElementById('trendCategoryPills');
+      const uniqueCats = ['Semua', ...Array.from(new Set(allMenus.map(m => m.categoryLabel).filter(Boolean)))];
+      if (!uniqueCats.includes(salesTrendState.category)) salesTrendState.category = 'Semua';
+      if (catContainer) {
+        catContainer.innerHTML = uniqueCats.map(c => {
+          const active = salesTrendState.category === c;
+          const safe = escapeHtml(c).replace(/'/g, "\\'");
+          return `<button type="button" onclick="setSalesTrendCategory('${safe}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap border transition ${active ? 'bg-slate-900 text-white border-slate-900 shadow-2xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">${escapeHtml(c)}</button>`;
+        }).join('');
+      }
+
+      // Render Grafik Harian 30 Hari (Semua Menu atau Menu Terpilih)
+      const focusedEntry = salesTrendState.focusedMenuKey ? menuMap.get(salesTrendState.focusedMenuKey) : null;
+      const chartTitleEl = document.getElementById('trendDetailChartTitle');
+      const chartBadgeEl = document.getElementById('trendDetailChartBadge');
+      const resetFocusBtn = document.getElementById('btnResetFocusedMenu');
+      const chartHintEl = document.getElementById('trendDetailChartHint');
+      const modalChartEl = document.getElementById('trendModalChartContainer');
+      const modalAxisEl = document.getElementById('trendModalChartAxis');
+
+      const chartSeries = days30.map(d => {
+        if (focusedEntry) {
+          return {
+            ymd: d.ymd,
+            label: d.label,
+            qty: focusedEntry.dailyQty30[d.ymd] || 0,
+            rev: focusedEntry.dailyRev30[d.ymd] || 0
+          };
+        }
+        return { ymd: d.ymd, label: d.label, qty: d.totalQty, rev: d.totalRev };
+      });
+
+      const seriesLast7 = chartSeries.slice(-7).reduce((s, x) => s + x.qty, 0);
+      const seriesPrev7 = chartSeries.slice(-14, -7).reduce((s, x) => s + x.qty, 0);
+      let seriesDiffPct = 0;
+      if (seriesPrev7 > 0) seriesDiffPct = ((seriesLast7 - seriesPrev7) / seriesPrev7) * 100;
+      else if (seriesLast7 > 0) seriesDiffPct = 100;
+
+      if (chartTitleEl) {
+        chartTitleEl.textContent = focusedEntry
+          ? `📈 Tren 30 Hari: ${focusedEntry.name} (${focusedEntry.qty} porsi • ${formatRupiah(focusedEntry.revenue)})`
+          : '📈 Grafik Tren Harian (30 Hari Terakhir — Semua Menu)';
+      }
+      if (resetFocusBtn) resetFocusBtn.classList.toggle('hidden', !focusedEntry);
+      if (chartHintEl) chartHintEl.classList.toggle('hidden', !!focusedEntry);
+      if (chartBadgeEl) {
+        if (seriesDiffPct > 0) {
+          chartBadgeEl.className = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200';
+          chartBadgeEl.textContent = `▲ +${seriesDiffPct.toFixed(1)}% (7H)`;
+        } else if (seriesDiffPct < 0) {
+          chartBadgeEl.className = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-rose-50 text-rose-700 border border-rose-200';
+          chartBadgeEl.textContent = `▼ ${seriesDiffPct.toFixed(1)}% (7H)`;
+        } else {
+          chartBadgeEl.className = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-200/70 text-slate-600';
+          chartBadgeEl.textContent = '▬ 0.0% Stabil';
+        }
+      }
+
+      if (modalChartEl) {
+        const maxDayQty = Math.max(1, ...chartSeries.map(d => d.qty));
+        const svgW = 600;
+        const svgH = 92;
+        const barW = 13;
+        const gap = (svgW - (chartSeries.length * barW)) / (chartSeries.length - 1);
+        let svg = `<svg viewBox="0 0 ${svgW} ${svgH}" class="w-full h-full overflow-visible">`;
+        chartSeries.forEach((d, idx) => {
+          const h = d.qty > 0 ? Math.max(6, Math.round((d.qty / maxDayQty) * (svgH - 18))) : 3;
+          const x = Math.round(idx * (barW + gap));
+          const y = svgH - h;
+          const isToday = idx === chartSeries.length - 1;
+          const fill = d.qty === 0 ? '#CBD5E1' : (isToday ? '#059669' : '#2563EB');
+          const labelTop = d.qty > 0 ? `<text x="${x + barW / 2}" y="${Math.max(9, y - 3)}" text-anchor="middle" font-size="8.5" font-family="monospace" font-weight="bold" fill="#475569">${d.qty}</text>` : '';
+          svg += `<g>
+            ${labelTop}
+            <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3.5" fill="${fill}">
+              <title>${d.ymd}: ${d.qty} porsi (${formatRupiah(d.rev)})</title>
+            </rect>
+          </g>`;
+        });
+        svg += '</svg>';
+        modalChartEl.innerHTML = svg;
+      }
+      if (modalAxisEl && chartSeries.length >= 30) {
+        modalAxisEl.innerHTML = `
+          <span>${escapeHtml(chartSeries[0].label)}</span>
+          <span>${escapeHtml(chartSeries[9].label)}</span>
+          <span>${escapeHtml(chartSeries[19].label)}</span>
+          <span class="font-bold text-slate-600">Hari Ini (${escapeHtml(chartSeries[29].label)})</span>
+        `;
+      }
+
+      // Filter & Urutkan Daftar Menu
+      const searchQ = String(document.getElementById('trendSearchMenuInput')?.value || '').trim().toLowerCase();
+      let filtered = allMenus.filter(m => {
+        if (salesTrendState.category !== 'Semua' && m.categoryLabel !== salesTrendState.category) return false;
+        if (searchQ && !m.name.toLowerCase().includes(searchQ) && !m.categoryLabel.toLowerCase().includes(searchQ)) return false;
+        return true;
+      });
+
+      if (salesTrendState.sort === 'best') {
+        filtered.sort((a, b) => (b.qty - a.qty) || (b.revenue - a.revenue) || a.name.localeCompare(b.name));
+      } else if (salesTrendState.sort === 'slow') {
+        filtered.sort((a, b) => (a.qty - b.qty) || (a.revenue - b.revenue) || a.name.localeCompare(b.name));
+      } else if (salesTrendState.sort === 'revenue') {
+        filtered.sort((a, b) => (b.revenue - a.revenue) || (b.qty - a.qty) || a.name.localeCompare(b.name));
+      } else if (salesTrendState.sort === 'az') {
+        filtered.sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      // Peta peringkat asli berdasarkan jumlah terjual
+      const rankMap = new Map();
+      topRankedByQty.forEach((m, i) => rankMap.set(m.name, i + 1));
+
+      const tbody = document.getElementById('salesTrendTableBody');
+      if (tbody) {
+        if (filtered.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="py-10 text-center text-slate-400 text-xs">Tidak ada menu yang cocok dengan pencarian / filter kategori.</td></tr>`;
+        } else {
+          tbody.innerHTML = filtered.map((m, idx) => {
+            const globalRank = rankMap.get(m.name) || (idx + 1);
+            const pctOfMax = Math.min(100, Math.round((m.qty / maxQtyGlobal) * 100));
+            const sharePct = grandTotalQty > 0 ? ((m.qty / grandTotalQty) * 100).toFixed(1) : '0.0';
+            const isFocused = salesTrendState.focusedMenuKey === m.name;
+            const safeName = escapeHtml(m.name).replace(/'/g, "\\'");
+
+            let rankBadge = `<span class="font-mono font-bold text-slate-500">#${globalRank}</span>`;
+            if (m.qty > 0 && globalRank === 1) rankBadge = `<span class="px-2 py-0.5 rounded-lg bg-amber-100 text-amber-800 font-mono font-extrabold text-[11px]">🥇 #1</span>`;
+            else if (m.qty > 0 && globalRank === 2) rankBadge = `<span class="px-2 py-0.5 rounded-lg bg-slate-200 text-slate-800 font-mono font-extrabold text-[11px]">🥈 #2</span>`;
+            else if (m.qty > 0 && globalRank === 3) rankBadge = `<span class="px-2 py-0.5 rounded-lg bg-orange-100 text-orange-800 font-mono font-extrabold text-[11px]">🥉 #3</span>`;
+            else if (m.qty === 0) rankBadge = `<span class="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200 font-mono font-bold text-[10px]">0x</span>`;
+
+            // Indikator tren 7 hari terakhir vs 7 hari sebelumnya per menu
+            let trend7Html = '<span class="text-[10px] font-mono text-slate-400">▬ 0%</span>';
+            if (m.prev7Qty === 0 && m.last7Qty > 0) {
+              trend7Html = `<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-mono font-bold text-[10px]">▲ +${m.last7Qty}p</span>`;
+            } else if (m.prev7Qty > 0) {
+              const dPct = ((m.last7Qty - m.prev7Qty) / m.prev7Qty) * 100;
+              if (dPct > 0) trend7Html = `<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-mono font-bold text-[10px]">▲ +${dPct.toFixed(0)}%</span>`;
+              else if (dPct < 0) trend7Html = `<span class="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 font-mono font-bold text-[10px]">▼ ${dPct.toFixed(0)}%</span>`;
+            }
+
+            const barColor = m.qty === 0 ? 'bg-slate-200' : (globalRank <= 3 ? 'bg-emerald-500' : 'bg-blue-600');
+
+            return `<tr onclick="selectSalesTrendFocusMenu('${safeName}')" title="Klik untuk melihat grafik tren harian ${escapeHtml(m.name)}" class="cursor-pointer transition ${isFocused ? 'bg-blue-50/90 ring-1 ring-inset ring-blue-400' : 'hover:bg-slate-50'}">
+              <td class="py-2.5 px-3 whitespace-nowrap">${rankBadge}</td>
+              <td class="py-2.5 px-3">
+                <div class="font-bold text-slate-800 text-xs sm:text-sm flex items-center gap-1.5">
+                  <span>${escapeHtml(m.name)}</span>
+                  ${m.qty === 0 ? '<span class="px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 text-[10px] font-semibold">Belum Terjual</span>' : ''}
+                  ${isFocused ? '<span class="px-1.5 py-0.2 rounded bg-blue-600 text-white text-[10px] font-semibold">Grafik Aktif</span>' : ''}
+                </div>
+                <div class="text-[11px] text-slate-400">${escapeHtml(m.categoryLabel)}</div>
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono text-slate-600 whitespace-nowrap">${formatRupiah(m.price)}</td>
+              <td class="py-2.5 px-3 text-center whitespace-nowrap">${trend7Html}</td>
+              <td class="py-2.5 px-3">
+                <div class="flex items-center justify-between text-[11px] font-mono mb-1">
+                  <span class="font-extrabold ${m.qty > 0 ? 'text-slate-900' : 'text-rose-500'}">${m.qty} porsi</span>
+                  <span class="text-slate-400">${sharePct}%</span>
+                </div>
+                <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div class="h-full rounded-full ${barColor} transition-all" style="width: ${m.qty > 0 ? Math.max(4, pctOfMax) : 0}%"></div>
+                </div>
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono font-bold text-slate-800 whitespace-nowrap">${formatRupiah(m.revenue)}</td>
+            </tr>`;
+          }).join('');
+        }
+      }
+
+      const footerEl = document.getElementById('salesTrendFooterNote');
+      if (footerEl) {
+        const periodLabel = {
+          today: 'Hari Ini',
+          '7d': '7 Hari Terakhir',
+          '30d': '30 Hari Terakhir',
+          all: 'Semua Riwayat'
+        }[salesTrendState.period] || '30 Hari Terakhir';
+        footerEl.textContent = `Menampilkan ${filtered.length} dari ${allMenus.length} menu • Periode: ${periodLabel}`;
+      }
+      const trendQuickBadge = document.getElementById('trendMinimizedQuickBadge');
+      if (trendQuickBadge) {
+        trendQuickBadge.textContent = `${filtered.length} menu • ${grandTotalQty} porsi (${formatRupiah(grandTotalRev)})`;
       }
     }
 
@@ -9957,7 +10655,8 @@
       'modalSettlement',
       'modalSettings',
       'modalSecretGreeting',
-      'modalCustomMenuItem'
+      'modalCustomMenuItem',
+      'modalSalesTrend'
     ];
 
     function syncBodyModalScrollLock() {
@@ -10002,6 +10701,9 @@
         populateCustomerDatalist();
         renderTransactionHistory();
       }
+      if (id === 'modalSalesTrend') {
+        renderSalesTrendModal();
+      }
       if (id === 'modalSettings') {
         document.getElementById('inputGasUrl').value = SCRIPT_URL;
         document.getElementById('inputPollInterval').value = POLL_INTERVAL_SEC;
@@ -10028,6 +10730,42 @@
       const el = document.getElementById(id);
       if (el) el.classList.add('hidden');
       syncBodyModalScrollLock();
+    }
+
+    function syncModalMinimizeButtonUI(modalId) {
+      const modalEl = document.getElementById(modalId);
+      if (!modalEl) return;
+      const isMinimized = modalEl.classList.contains('is-minimized');
+      modalEl.querySelectorAll('.btn-modal-minimize').forEach(btn => {
+        const iconEl = btn.querySelector('.minimize-icon');
+        const labelEl = btn.querySelector('.minimize-label');
+        if (labelEl && !btn.hasAttribute('data-default-label')) {
+          btn.setAttribute('data-default-label', labelEl.textContent.trim());
+        }
+        const defaultLabel = btn.getAttribute('data-default-label') || 'Ringkas';
+        if (iconEl) iconEl.textContent = isMinimized ? '▾' : '▴';
+        if (labelEl) {
+          labelEl.textContent = isMinimized
+            ? (/filter/i.test(defaultLabel) ? 'Tampilkan Filter' : 'Tampilkan Header')
+            : defaultLabel;
+        }
+        btn.setAttribute('aria-expanded', isMinimized ? 'false' : 'true');
+      });
+    }
+
+    function toggleModalMinimize(modalId, forceState = null) {
+      const modalEl = document.getElementById(modalId);
+      if (!modalEl) return;
+      if (typeof triggerHaptic === 'function') triggerHaptic(12);
+      const nextState = (forceState !== null) ? Boolean(forceState) : !modalEl.classList.contains('is-minimized');
+      modalEl.classList.toggle('is-minimized', nextState);
+      syncModalMinimizeButtonUI(modalId);
+
+      if (modalId === 'modalPos' && typeof posState !== 'undefined') {
+        posState.cartExpanded = nextState;
+        if (typeof applyPosCartExpandUI === 'function') applyPosCartExpandUI();
+        if (typeof renderPosCart === 'function') renderPosCart();
+      }
     }
 
     // 1. Pintasan Keyboard Eksternal: Tekan 'Esc' untuk langsung menutup pop-up yang sedang aktif
